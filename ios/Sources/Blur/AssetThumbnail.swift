@@ -49,9 +49,9 @@ struct AssetThumbnail: View {
         guard let asset = fetch.firstObject else { return nil }
 
         let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat
-        options.resizeMode = .fast
-        options.isNetworkAccessAllowed = false   // thumbs are local-only
+        options.deliveryMode = .highQualityFormat   // fires once → safe for the continuation
+        options.resizeMode = .exact                 // crisp tiles, like Photos (.fast was soft)
+        options.isNetworkAccessAllowed = true       // fetch sharp originals from iCloud, like Photos
 
         let target = CGSize(width: side * scale, height: side * scale)
 

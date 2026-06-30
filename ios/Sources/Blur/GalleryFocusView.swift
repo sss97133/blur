@@ -2,9 +2,9 @@
 //
 // This is where "Blur" earns its name. Two modes:
 //
-//   • Curate (default): every photo is visible; tap any photo to hide it
-//     (it blurs). This is the passive curation gesture — mark the ones you
-//     wouldn't want to flash past when showing someone.
+//   • Curate (default): tap a photo to open its details (the tag inspector);
+//     touch and hold to hide it (it blurs). Hiding marks the ones you wouldn't
+//     want to flash past when showing someone.
 //   • Show: a single toggle. Hidden photos disappear entirely, so you can hand
 //     someone your phone and flip through this exact group with confidence —
 //     no frantic scrolling, no accidental reveal.
@@ -17,6 +17,7 @@ struct GalleryFocusView: View {
     let gallery: Gallery
     @EnvironmentObject private var library: LibraryEngine
     @State private var showMode = false
+    @State private var inspecting: InspectSelection?
 
     private let columns = [GridItem(.adaptive(minimum: 110), spacing: 4)]
 
@@ -36,7 +37,7 @@ struct GalleryFocusView: View {
             LazyVGrid(columns: columns, spacing: 4) {
                 ForEach(visibleAssetIDs, id: \.self) { assetID in
                     Button {
-                        if !showMode { library.toggleHidden(assetID) }
+                        inspecting = InspectSelection(id: assetID)
                     } label: {
                         AssetThumbnail(
                             assetIdentifier: assetID,
@@ -46,9 +47,16 @@ struct GalleryFocusView: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(showMode)
+                    .contextMenu {
+                        Button {
+                            library.toggleHidden(assetID)
+                        } label: {
+                            Label(library.isHidden(assetID) ? "Show" : "Hide",
+                                  systemImage: library.isHidden(assetID) ? "eye" : "eye.slash")
+                        }
+                    }
                     .accessibilityLabel(library.isHidden(assetID) ? "Photo, hidden" : "Photo")
-                    .accessibilityHint(showMode ? "" : "Double-tap to hide")
+                    .accessibilityHint("Opens details. Touch and hold to hide.")
                 }
             }
             .padding(4)
@@ -66,7 +74,7 @@ struct GalleryFocusView: View {
         .safeAreaInset(edge: .bottom) {
             // One-time, self-dismissing: gone the moment the gesture is used.
             if !showMode && !hasHidden {
-                Text("Tap a photo to hide it")
+                Text("Tap a photo for its details · touch and hold to hide")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -76,5 +84,14 @@ struct GalleryFocusView: View {
                     .background(.ultraThinMaterial)
             }
         }
+        .sheet(item: $inspecting) { selection in
+            PhotoInspectorView(assetID: selection.id)
+        }
     }
+}
+
+/// Identifiable wrapper so `.sheet(item:)` can present the inspector for a
+/// specific photo.
+private struct InspectSelection: Identifiable {
+    let id: String
 }
