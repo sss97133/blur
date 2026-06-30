@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Blur — Investor Deck</title>
+<meta name="description" content="Blur — the private photo app that organizes itself. A Nuke product." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Inter:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f5f2ec; --paper-2:#efeae1; --ink:#17140f; --muted:#6c655a;
+    --hair:#ddd6c8; --ease:cubic-bezier(0.16,1,0.3,1);
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html{scroll-snap-type:y proximity;scroll-behavior:smooth;}
+  body{background:var(--paper);color:var(--ink);font-family:"Inter",system-ui,sans-serif;font-weight:300;line-height:1.6;-webkit-font-smoothing:antialiased;}
+  .serif{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;line-height:1.06;letter-spacing:-0.01em;}
+  .label{font-family:"Inter",sans-serif;font-size:10px;font-weight:500;letter-spacing:.32em;text-transform:uppercase;color:var(--muted);}
+  .rule{width:28px;height:1px;background:var(--ink);opacity:.5;margin:20px 0;}
+
+  .slide{
+    min-height:100vh;scroll-snap-align:start;
+    padding:clamp(48px,9vh,110px) clamp(28px,8vw,180px);
+    display:flex;flex-direction:column;justify-content:center;position:relative;
+    border-bottom:1px solid var(--hair);
+  }
+  .slide:nth-child(even){background:var(--paper-2);}
+  .num{position:absolute;top:clamp(28px,5vh,52px);right:clamp(28px,8vw,180px);}
+  .kicker{margin-bottom:18px;}
+
+  h1{font-size:clamp(40px,8vw,110px);max-width:15ch;}
+  h2{font-size:clamp(30px,5.2vw,68px);max-width:18ch;}
+  .lead{font-size:clamp(18px,2.3vw,28px);max-width:30ch;margin-top:8px;}
+  .body{color:var(--muted);max-width:54ch;margin-top:22px;font-size:15px;}
+  .body.tight{max-width:46ch;}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:clamp(20px,4vw,64px);margin-top:34px;}
+  @media(max-width:760px){.cols{grid-template-columns:1fr;gap:18px;}}
+  .cols h4{font-size:14px;font-weight:500;letter-spacing:.01em;margin-bottom:6px;}
+  .cols p{color:var(--muted);font-size:14px;max-width:34ch;}
+  .cols .n{font-size:clamp(22px,3vw,34px);margin-bottom:6px;}
+
+  .stat{display:flex;gap:clamp(24px,6vw,80px);margin-top:36px;flex-wrap:wrap;}
+  .stat .big{font-size:clamp(34px,5vw,64px);}
+  .stat .cap{color:var(--muted);font-size:13px;max-width:18ch;margin-top:6px;}
+
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:clamp(16px,3vw,40px);margin-top:34px;}
+  @media(max-width:760px){.grid3{grid-template-columns:1fr;gap:16px;}}
+
+  .ask{background:var(--ink);color:var(--paper);}
+  .ask .label{color:#b3ac9d;} .ask .rule{background:var(--paper);opacity:.4;}
+  .ask .body{color:#cfc7b6;}
+
+  .progress{position:fixed;left:0;top:0;height:2px;background:var(--ink);width:0;z-index:9;transition:width .15s linear;}
+  .footer-note{position:absolute;bottom:clamp(20px,4vh,40px);left:clamp(28px,8vw,180px);color:var(--muted);}
+
+  /* depth-of-field tiles for the hook */
+  .tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;max-width:760px;margin-top:42px;}
+  @media(max-width:760px){.tiles{grid-template-columns:repeat(3,1fr);}}
+  .tile{aspect-ratio:3/4;border-radius:2px;filter:blur(5px);opacity:.5;background:linear-gradient(160deg,#cdc4b1,#a89d86);}
+  .tile.keep{filter:none;opacity:1;transform:scale(1.06);box-shadow:0 18px 50px -20px rgba(23,20,15,.45);background:linear-gradient(160deg,#b8ad97,#8d8268);}
+</style>
+</head>
+<body>
+<div class="progress" id="p"></div>
+
+<!-- 1 — HOOK -->
+<section class="slide">
+  <span class="num label">01 — Blur</span>
+  <span class="label kicker">A Nuke product</span>
+  <h1 class="serif">Ten thousand photos. You'll never find the one you mean.</h1>
+  <div class="tiles">
+    <div class="tile"></div><div class="tile"></div><div class="tile keep"></div>
+    <div class="tile"></div><div class="tile"></div><div class="tile"></div>
+  </div>
+  <p class="footer-note label">Scroll</p>
+</section>
+
+<!-- 2 — PRODUCT -->
+<section class="slide">
+  <span class="num label">02 — Product</span>
+  <span class="label kicker">What it is</span>
+  <h2 class="serif">The private photo app that organizes itself.</h2>
+  <p class="lead serif">As smooth as Apple Photos. Better power under the hood.</p>
+  <div class="cols">
+    <div><h4>Private by nature</h4><p>No account, no cloud. Works in airplane mode.</p></div>
+    <div><h4>Quietly ordered</h4><p>It organizes itself and finds the photos you missed.</p></div>
+    <div><h4>Shown with intention</h4><p>Flip to the one that matters. The rest softens away.</p></div>
+    <div><h4>Free &amp; anonymous</h4><p>Nothing ever leaves your phone.</p></div>
+  </div>
+</section>
+
+<!-- 3 — WHY NOW -->
+<section class="slide">
+  <span class="num label">03 — Why now</span>
+  <span class="label kicker">Timing</span>
+  <h2 class="serif">The default app creates the pain. The technology to fix it just arrived.</h2>
+  <div class="cols">
+    <div><div class="serif n">01</div><h4>Apple Photos breaks at scale</h4><p>Smart albums choke past a few dozen; no way to find strays or present safely.</p></div>
+    <div><div class="serif n">02</div><h4>On-device AI is now real</h4><p>Apple's Vision &amp; Foundation Models make private, server-free intelligence possible.</p></div>
+    <div><div class="serif n">03</div><h4>Privacy is a buying criterion</h4><p>And every monetized incumbent is account-and-cloud first.</p></div>
+  </div>
+</section>
+
+<!-- 4 — MARKET -->
+<section class="slide">
+  <span class="num label">04 — Market</span>
+  <span class="label kicker">The opportunity</span>
+  <h2 class="serif">A large category, owned by manual apps with predatory pricing.</h2>
+  <div class="stat">
+    <div><div class="serif big">~$40M</div><div class="cap">spent per month, photo cleaner / organizer category</div></div>
+    <div><div class="serif big">~95%</div><div class="cap">of that revenue on iOS</div></div>
+    <div><div class="serif big">$0</div><div class="cap">incumbents owning the private + passive lane</div></div>
+  </div>
+  <p class="body">The leaders are swipe-to-clean apps charging $5–8 <em>per week</em>. The position that's private, passive, and on-device is validated by small players and owned by no one at scale. <span style="opacity:.7">(Category figures are third-party estimates.)</span></p>
+</section>
+
+<!-- 5 — CLIENT -->
+<section class="slide">
+  <span class="num label">05 — Client</span>
+  <span class="label kicker">Who it's for</span>
+  <h2 class="serif">Someone with a life worth showing — and a camera roll too full to find it.</h2>
+  <div class="cols">
+    <div><h4>Beachhead</h4><p>iPhone users with 10k+ photos who regularly show their phone — enthusiasts, collectors, makers, parents.</p></div>
+    <div><h4>The wedge</h4><p>Show-and-tell: handing someone your phone and landing on exactly the right photo.</p></div>
+    <div><h4>Broad market</h4><p>Privacy-conscious iPhone users — the trust layer, not the beachhead.</p></div>
+    <div><h4>First community</h4><p>Nuke's enthusiast network — a built-in audience that matches the profile.</p></div>
+  </div>
+</section>
+
+<!-- 6 — HOW IT WORKS -->
+<section class="slide">
+  <span class="num label">06 — How it works</span>
+  <span class="label kicker">Under the hood</span>
+  <h2 class="serif">Apple's smoothness, with an engine that actually organizes.</h2>
+  <div class="grid3">
+    <div><div class="serif n">→</div><h4 style="margin-top:8px">Seed</h4><p style="color:var(--muted);font-size:14px;max-width:30ch">Read Apple's own on-device tags &amp; albums. Free, private, instant.</p></div>
+    <div><div class="serif n">→</div><h4 style="margin-top:8px">Cluster &amp; complete</h4><p style="color:var(--muted);font-size:14px;max-width:30ch">On-device Vision finds the strays that belong in the albums you started.</p></div>
+    <div><div class="serif n">→</div><h4 style="margin-top:8px">Show</h4><p style="color:var(--muted);font-size:14px;max-width:30ch">Flip to the group; everything else blurs. Native PhotoKit speed.</p></div>
+  </div>
+  <p class="body">Forked from a proven, App-Store-runbooked iOS app and <em>inverted</em> — the upload removed, the photos kept on the phone. The expensive parts already exist.</p>
+</section>
+
+<!-- 7 — DEMO -->
+<section class="slide">
+  <span class="num label">07 — Demo</span>
+  <span class="label kicker">See it</span>
+  <h2 class="serif">It organizes itself. It finds what you missed. You show with confidence.</h2>
+  <p class="body">[ Live demo / screen recording: a chaotic library resolving into galleries → "3 more photos belong in Garage — added" → Show mode hiding everything but the chosen set. ]</p>
+  <div class="tiles" style="margin-top:34px">
+    <div class="tile"></div><div class="tile keep"></div><div class="tile"></div>
+    <div class="tile"></div><div class="tile"></div><div class="tile keep" style="background:linear-gradient(160deg,#c2b9a6,#9c917b)"></div>
+  </div>
+</section>
+
+<!-- 8 — BUSINESS MODEL -->
+<section class="slide">
+  <span class="num label">08 — Business model</span>
+  <span class="label kicker">How it makes money</span>
+  <h2 class="serif">Free to acquire. Paid to automate. Cheap to run.</h2>
+  <div class="cols">
+    <div><h4>Free — the wedge</h4><p>The full on-device organizer. ~$0 marginal cost. No account. This is the acquisition engine.</p></div>
+    <div><h4>Paid — automatic handling</h4><p>~$20–30 / year for fully passive organization. The proven, sustainable band — and an undercut of the weekly-priced cleaners.</p></div>
+  </div>
+  <p class="body tight">Revenue comes from convenience, not from your data. Run cost stays near zero because the work is on-device.</p>
+</section>
+
+<!-- 9 — MOAT -->
+<section class="slide">
+  <span class="num label">09 — Defensibility</span>
+  <span class="label kicker">Why us</span>
+  <h2 class="serif">Speed, taste, trust — and a studio that ships products like a template.</h2>
+  <div class="cols">
+    <div><h4>Won't Apple do this?</h4><p>Apple optimizes for everyone and won't ship no-account intelligence or fill the niche gaps. We move first and stay narrow.</p></div>
+    <div><h4>The real moat</h4><p>Execution, taste, and trust — on top of a reusable app shell + image engine that lets Nuke ship the next product fast.</p></div>
+  </div>
+  <p class="body tight">Honest: the early moat is positioning and velocity, not patents. That's why the first product must be flawless and the studio must be fast.</p>
+</section>
+
+<!-- 10 — TRACTION -->
+<section class="slide">
+  <span class="num label">10 — Plan</span>
+  <span class="label kicker">Path to traction</span>
+  <h2 class="serif">Ship small, learn fast.</h2>
+  <div class="grid3">
+    <div><h4>Now</h4><p style="color:var(--muted);font-size:14px;max-width:28ch">Free app → TestFlight → App Store. Seed via Nuke's community.</p></div>
+    <div><h4>Learn</h4><p style="color:var(--muted);font-size:14px;max-width:28ch">Anonymous first-mile funnel: install → first gallery → show-mode → upgrade.</p></div>
+    <div><h4>Grow</h4><p style="color:var(--muted);font-size:14px;max-width:28ch">ASO into an underserved category; the show-and-tell moment is inherently social.</p></div>
+  </div>
+</section>
+
+<!-- 11 — STUDIO -->
+<section class="slide">
+  <span class="num label">11 — The studio</span>
+  <span class="label kicker">Nuke</span>
+  <h2 class="serif">Blur is product #1 — and the mold for what comes next.</h2>
+  <p class="body">Nuke is a product studio with a reusable app shell, an image-intelligence engine, and a launch runbook. Blur is the first proof it can take a product from zero to the App Store — and the template the next products fork. The discipline shows in the build: measure, don't guess; ship small, learn fast; private by architecture.</p>
+</section>
+
+<!-- 12 — THE ASK -->
+<section class="slide ask">
+  <span class="num label">12 — The ask</span>
+  <span class="label kicker">What we're raising</span>
+  <h2 class="serif">The build is cheap. We're funding taste and reach.</h2>
+  <p class="body">Engineering is leveraged — we reuse the hard parts. The spend is brand &amp; identity, design, and go-to-market: the things that turn a sharp product into a category. <strong style="color:var(--paper);font-weight:500">[ Amount &amp; use of funds — to be set with the team. ]</strong></p>
+  <div class="rule"></div>
+  <span class="label">Blur — A Nuke Product · Private. Passive. Yours.</span>
+</section>
+
+<script>
+  const p=document.getElementById('p');
+  addEventListener('scroll',()=>{const h=document.documentElement;const max=h.scrollHeight-h.clientHeight;p.style.width=(max>0?(h.scrollTop/max*100):0)+'%';},{passive:true});
+</script>
+</body>
+</html>

@@ -110,6 +110,8 @@ blur/
 │   └── index.html
 └── docs/
     ├── product.md          Product · Cost · Client — the pitch, in full
+    ├── deck/               the investor deck (open index.html)
+    ├── app-store-listing.md  name, subtitle, description, keywords
     ├── build-plan.md       architecture, reuse ledger, phased plan
     └── app-store.md        TestFlight → App Store runbook
 ```
