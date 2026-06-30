@@ -1,6 +1,6 @@
 # Blur — App Store Launch Runbook (v0, local tier)
 
-Derived from `apps/APP_STORE_LAUNCH.md` (the Nuke capture runbook). Because
+Adapted from the Nuke capture app's App Store runbook. Because
 Blur v0 is **local-only — no account, no network, no data collected** — most
 of that runbook's blockers disappear. What's left is short.
 
@@ -48,7 +48,7 @@ paid/account phase lands, restore that requirement from the capture runbook §2.
 
 ```bash
 brew install xcodegen
-cd apps/blur          # or the repo root once Blur is extracted to its own repo
+cd ios
 ./generate.sh
 open Blur.xcodeproj
 ```

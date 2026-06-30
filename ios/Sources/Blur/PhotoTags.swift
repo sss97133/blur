@@ -58,6 +58,15 @@ struct PhotoTags {
 
     var megapixels: Double { Double(pixelWidth * pixelHeight) / 1_000_000 }
 
+    /// Cached — `fields` is recomputed on every SwiftUI pass; a fresh
+    /// DateFormatter each time is needless churn.
+    private static let dateFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return f
+    }()
+
     /// The tag table for this photo — non-empty fields only, grouped and
     /// formatted for display. Same shape the spreadsheet view will use as columns.
     var fields: [TagField] {
@@ -69,9 +78,7 @@ struct PhotoTags {
 
         // Capture
         if let creationDate {
-            let f = DateFormatter()
-            f.dateStyle = .medium; f.timeStyle = .short
-            add("Capture", "Taken", f.string(from: creationDate))
+            add("Capture", "Taken", Self.dateFormatter.string(from: creationDate))
         }
         if let c = location?.coordinate {
             add("Capture", "Place", String(format: "%.5f, %.5f", c.latitude, c.longitude))

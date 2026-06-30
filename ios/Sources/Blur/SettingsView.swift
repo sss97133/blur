@@ -23,6 +23,10 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("Galleries", value: "\(library.galleries.count)")
                     LabeledContent("Hidden photos", value: "\(library.hiddenAssetIDs.count)")
+                    if let scan = library.lastScan {
+                        LabeledContent("Last scan",
+                                       value: "\(scan.photos) photos · \(scan.userAlbums) albums")
+                    }
                 } header: {
                     Text("On this device")
                 } footer: {

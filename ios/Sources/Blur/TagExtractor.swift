@@ -1,10 +1,12 @@
 // TagExtractor.swift — reads a photo's factual tags from PhotoKit + ImageIO.
 //
 // Two tiers, both on-device, both free:
-//   • fastTags(for:)  — instant, from PHAsset alone (no image load).
-//   • fullTags(for:)  — fast tags PLUS EXIF (camera, lens, ISO…), which needs
-//     the image's metadata. We read ONLY the metadata via CGImageSource — we
-//     never decode the pixels — so it's cheap.
+//   • fastTags(for:)  — instant, from PHAsset properties alone (no image load).
+//   • fullTags(for:)  — fast tags PLUS album membership and EXIF (camera, lens,
+//     ISO…). Reading EXIF means fetching the original's bytes once (PhotoKit
+//     may pull them from iCloud); we read only the metadata dictionary from
+//     them via CGImageSource — the pixels are never decoded. On demand, per
+//     photo; a whole-library pass would cache this (later, the Table).
 //
 // SwiftUI-free: part of the shared engine core.
 
@@ -32,7 +34,6 @@ enum TagExtractor {
         t.isHDR = s.contains(.photoHDR)
         t.isDepth = s.contains(.photoDepthEffect)
         t.burstID = asset.burstIdentifier
-        t.albumNames = albumNames(for: asset)
         return t
     }
 
@@ -50,18 +51,21 @@ enum TagExtractor {
 
     static func fullTags(for asset: PHAsset) async -> PhotoTags {
         var t = fastTags(for: asset)
+        t.albumNames = albumNames(for: asset)   // reverse lookup — kept off the instant path
         guard let props = await imageProperties(for: asset) else { return t }
 
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]
         let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
 
+        // ImageIO hands these back as NSNumber; bridge explicitly so a stray
+        // type doesn't silently null the field (ISO arrives as [NSNumber]).
         t.cameraMake = tiff?[kCGImagePropertyTIFFMake] as? String
         t.cameraModel = tiff?[kCGImagePropertyTIFFModel] as? String
         t.lensModel = exif?[kCGImagePropertyExifLensModel] as? String
-        t.iso = (exif?[kCGImagePropertyExifISOSpeedRatings] as? [Int])?.first
-        t.aperture = exif?[kCGImagePropertyExifFNumber] as? Double
-        t.focalLength = exif?[kCGImagePropertyExifFocalLength] as? Double
-        t.shutter = exif?[kCGImagePropertyExifExposureTime] as? Double
+        t.iso = (exif?[kCGImagePropertyExifISOSpeedRatings] as? [NSNumber])?.first?.intValue
+        t.aperture = (exif?[kCGImagePropertyExifFNumber] as? NSNumber)?.doubleValue
+        t.focalLength = (exif?[kCGImagePropertyExifFocalLength] as? NSNumber)?.doubleValue
+        t.shutter = (exif?[kCGImagePropertyExifExposureTime] as? NSNumber)?.doubleValue
         return t
     }
 

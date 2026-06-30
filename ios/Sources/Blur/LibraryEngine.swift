@@ -31,6 +31,11 @@ final class LibraryEngine: ObservableObject {
     /// show a loading state instead of an empty state during first launch.
     @Published private(set) var didCompleteInitialScan = false
 
+    /// The last scan's tally — the scan's pulse, surfaced in Settings and the
+    /// console so a stuck or empty scan is never silent (production-engineering
+    /// law #6: a fire-and-forget path needs the thing that notices it failing).
+    @Published private(set) var lastScan: ScanSummary?
+
     /// True when the user granted access to only a SUBSET of their library
     /// (iOS limited-access mode). The UI surfaces Apple's own "select more
     /// photos" picker in this case — we never work around the limit, we use it.
@@ -100,18 +105,30 @@ final class LibraryEngine: ObservableObject {
             defaults.set(lastScanDate, forKey: Key.lastScan)
         }
 
-        var built: [Gallery] = []
-        built.append(contentsOf: collectGalleries(in: .album, source: .userAlbum))
-        built.append(contentsOf: smartGalleries())
+        let userAlbums = collectGalleries(in: .album, source: .userAlbum)
+        let smart = smartGalleries()
 
         // Drop empties (house rule: no empty shells) and sort user albums first,
         // then by size descending.
-        galleries = built
+        let built = (userAlbums + smart)
             .filter { $0.count > 0 }
             .sorted { lhs, rhs in
                 if lhs.source != rhs.source { return lhs.source == .userAlbum }
                 return lhs.count > rhs.count
             }
+        galleries = built
+
+        // The scan's pulse: stash the tally for Settings and log it, so a stuck
+        // or empty scan is visible instead of silent.
+        let photos = built.reduce(0) { $0 + $1.count }
+        lastScan = ScanSummary(galleries: built.count, userAlbums: userAlbums.count,
+                               smartAlbums: smart.count, photos: photos)
+        if built.isEmpty {
+            NSLog("Blur scan: 0 galleries — library empty or PhotoKit returned nothing")
+        } else {
+            NSLog("Blur scan: %d galleries (%d user, %d smart), %d photos",
+                  built.count, userAlbums.count, smart.count, photos)
+        }
         return true
     }
 
@@ -203,6 +220,14 @@ final class LibraryEngine: ObservableObject {
         while let presented = top?.presentedViewController { top = presented }
         return top
     }
+}
+
+/// One scan's tally — the pulse surfaced in Settings and the console.
+struct ScanSummary {
+    let galleries: Int
+    let userAlbums: Int
+    let smartAlbums: Int
+    let photos: Int
 }
 
 /// Tiny NSObject shim — PHPhotoLibraryChangeObserver calls arrive on a

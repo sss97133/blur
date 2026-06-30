@@ -4,10 +4,11 @@
 galleries you can find and show fast — and lets you hide the ones you don't want
 flashing past when you hand someone your phone. Everything happens **on-device**.
 
-> **Status:** v0 scaffold, staged inside the nuke monorepo at `apps/blur/` for
-> review. It is self-contained (no dependency on the rest of the repo) and is
-> intended to be **extracted into its own repository** before launch — Blur is a
-> standalone product Nuke publishes. See `FEASIBILITY_AND_BUILD_PLAN.md`.
+> **Status:** v0 — the free, pure-local tier. The native app lives here in
+> `ios/`; product, plan, and runbook live in [`../docs/`](../docs/) (see
+> [`../docs/product.md`](../docs/product.md) and
+> [`../docs/build-plan.md`](../docs/build-plan.md)). Blur is a standalone
+> product Nuke publishes.
 
 ## What v0 is (the free tier)
 
@@ -45,7 +46,7 @@ Connect never rejects a stale build).
 
 ```bash
 brew install xcodegen
-cd apps/blur          # (or the repo root once extracted)
+cd ios
 ./generate.sh
 open Blur.xcodeproj
 ```
@@ -76,7 +77,7 @@ Sources/Blur/
 
 ## Shipping
 
-See `APP_STORE_LAUNCH.md` (Blur-specific runbook) for the TestFlight → App
+See [`../docs/app-store.md`](../docs/app-store.md) (Blur-specific runbook) for the TestFlight → App
 Store path. Because v0 is local-only with no account, several of the capture
 app's blockers (privacy-policy data disclosures, account-deletion RPC) shrink
 dramatically.
