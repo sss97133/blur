@@ -109,6 +109,7 @@ blur/
 ├── web/                 ← the free landing page (static, Vercel-ready)
 │   └── index.html
 └── docs/
+    ├── doctrine.md         the fixed points — stance + design-as-infrastructure
     ├── product.md          Product · Cost · Client — the pitch, in full
     ├── deck/               the investor deck (open index.html)
     ├── app-store-listing.md  name, subtitle, description, keywords
