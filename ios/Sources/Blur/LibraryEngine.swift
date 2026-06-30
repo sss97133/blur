@@ -128,6 +128,9 @@ final class LibraryEngine: ObservableObject {
     /// A curated set of Apple's smart albums — the free "seed" layer.
     private func smartGalleries() -> [Gallery] {
         let subtypes: [PHAssetCollectionSubtype] = [
+            // The whole library ("Recents") — guarantees the app is never empty
+            // for someone who has photos but no albums. Mirrors Photos itself.
+            .smartAlbumUserLibrary,
             .smartAlbumFavorites,
             .smartAlbumSelfPortraits,
             .smartAlbumScreenshots,
