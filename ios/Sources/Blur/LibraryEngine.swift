@@ -11,6 +11,7 @@
 
 import Foundation
 import Photos
+import PhotosUI
 import UIKit
 
 @MainActor
@@ -128,7 +129,7 @@ final class LibraryEngine: ObservableObject {
     private func smartGalleries() -> [Gallery] {
         let subtypes: [PHAssetCollectionSubtype] = [
             .smartAlbumFavorites,
-            .smartAlbumSelfies,
+            .smartAlbumSelfPortraits,
             .smartAlbumScreenshots,
             .smartAlbumPanoramas,
             .smartAlbumBursts,
