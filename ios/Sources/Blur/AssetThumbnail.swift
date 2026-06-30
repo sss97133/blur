@@ -30,6 +30,8 @@ struct AssetThumbnail: View {
         }
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        // Decorative — the enclosing card/button carries the accessible label.
+        .accessibilityHidden(true)
         .task(id: assetIdentifier) {
             image = await Self.loadThumbnail(for: assetIdentifier, side: side)
         }

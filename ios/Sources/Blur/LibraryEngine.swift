@@ -11,6 +11,7 @@
 
 import Foundation
 import Photos
+import UIKit
 
 @MainActor
 final class LibraryEngine: ObservableObject {
@@ -24,6 +25,11 @@ final class LibraryEngine: ObservableObject {
     @Published private(set) var isScanning = false
     @Published private(set) var authorizationDenied = false
     @Published private(set) var lastScanDate: Date?
+
+    /// True when the user granted access to only a SUBSET of their library
+    /// (iOS limited-access mode). The UI surfaces Apple's own "select more
+    /// photos" picker in this case — we never work around the limit, we use it.
+    @Published private(set) var accessIsLimited = false
 
     /// Asset localIdentifiers the user has marked hidden (blurred). Rendered
     /// with a heavy blur and hidden entirely in "Show mode".
@@ -59,6 +65,7 @@ final class LibraryEngine: ObservableObject {
             return
         }
         authorizationDenied = false
+        accessIsLimited = (status == .limited)
         started = true
 
         let observer = LibraryObserver { [weak self] in
@@ -78,6 +85,9 @@ final class LibraryEngine: ObservableObject {
     func rescan() async -> Bool {
         guard !isScanning, !authorizationDenied else { return false }
         isScanning = true
+        // Authorization can change between passes (Settings, or the limited
+        // picker) — keep the flag honest.
+        accessIsLimited = (PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited)
         defer {
             isScanning = false
             lastScanDate = Date()
@@ -162,6 +172,27 @@ final class LibraryEngine: ObservableObject {
             hiddenAssetIDs.insert(assetID)
         }
         defaults.set(Array(hiddenAssetIDs), forKey: Key.hidden)
+    }
+
+    // ─── Limited-library access (SDK-max, not worked around) ─────────────────
+
+    /// Present Apple's own "select more photos" sheet. The change observer
+    /// already fires a rescan when the selection changes, so newly-granted
+    /// photos appear without any extra plumbing.
+    func presentLimitedPicker() {
+        guard let presenter = Self.topViewController() else { return }
+        PHPhotoLibrary.shared().presentLimitedLibraryPicker(from: presenter)
+    }
+
+    /// Top-most view controller in the active foreground scene — the standard
+    /// way to present a UIKit-hosted picker from SwiftUI.
+    private static func topViewController() -> UIViewController? {
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        var top = scene?.keyWindow?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
 }
 

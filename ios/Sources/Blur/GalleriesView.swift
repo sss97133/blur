@@ -5,6 +5,7 @@
 // to open it in the focus view, where you can curate and enter Show mode.
 
 import SwiftUI
+import UIKit
 
 struct GalleriesView: View {
     @EnvironmentObject private var library: LibraryEngine
@@ -25,6 +26,16 @@ struct GalleriesView: View {
             }
             .navigationTitle("Blur")
             .toolbar {
+                if library.accessIsLimited {
+                    ToolbarItem(placement: .topBarLeading) {
+                        Button {
+                            library.presentLimitedPicker()
+                        } label: {
+                            Label("Add Photos", systemImage: "plus")
+                        }
+                        .accessibilityLabel("Add more photos")
+                    }
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         showSettings = true
@@ -108,5 +119,8 @@ private struct GalleryCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(gallery.title), \(gallery.count) photo\(gallery.count == 1 ? "" : "s")")
+        .accessibilityAddTraits(.isButton)
     }
 }

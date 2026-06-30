@@ -41,6 +41,8 @@ struct GalleryFocusView: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(showMode)
+                    .accessibilityLabel(library.isHidden(assetID) ? "Photo, hidden" : "Photo")
+                    .accessibilityHint(showMode ? "" : "Double-tap to hide")
                 }
             }
             .padding(4)
