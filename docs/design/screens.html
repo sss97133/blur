@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Blur — App Screens (design direction)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Cormorant+Garamond:wght@300;400&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --paper:#f5f2ec; --ink:#17140f; --muted:#7a7468; --hair:#e4ddd0;
+    --screen:#fbfaf7; --chrome:#1c1813;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-font-smoothing:antialiased;}
+  body{background:var(--paper);color:var(--ink);font-family:"Inter",system-ui,sans-serif;font-weight:300;padding:clamp(32px,6vw,80px) clamp(20px,5vw,80px);}
+  .head{max-width:60ch;margin-bottom:clamp(36px,6vh,64px);}
+  .label{font-size:10px;font-weight:600;letter-spacing:.3em;text-transform:uppercase;color:var(--muted);}
+  .head h1{font-family:"Cormorant Garamond",Georgia,serif;font-weight:300;font-size:clamp(34px,6vw,64px);line-height:1.05;margin:14px 0 12px;letter-spacing:-.01em;}
+  .head p{color:var(--muted);max-width:50ch;font-size:15px;}
+
+  .rail{display:flex;gap:clamp(28px,5vw,64px);flex-wrap:wrap;align-items:flex-start;}
+  .device{display:flex;flex-direction:column;align-items:center;gap:14px;}
+  .caption{font-size:10px;font-weight:600;letter-spacing:.28em;text-transform:uppercase;color:var(--muted);}
+
+  /* ─── iPhone frame ─── */
+  .phone{
+    width:288px;height:606px;border-radius:46px;background:var(--chrome);
+    padding:9px;box-shadow:0 30px 70px -36px rgba(23,20,15,.5);
+    position:relative;flex:0 0 auto;
+  }
+  .screen{width:100%;height:100%;border-radius:38px;background:var(--screen);overflow:hidden;position:relative;display:flex;flex-direction:column;}
+  .island{position:absolute;top:11px;left:50%;transform:translateX(-50%);width:88px;height:26px;background:#000;border-radius:16px;z-index:5;}
+
+  .status{display:flex;justify-content:space-between;align-items:center;padding:14px 22px 0;font-size:11px;font-weight:500;color:var(--ink);}
+  .status .dots{display:flex;gap:5px;align-items:center;}
+  .status .dots span{display:inline-block;}
+
+  .nav{padding:18px 20px 12px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--hair);}
+  .nav .word{font-size:11px;font-weight:600;letter-spacing:.34em;text-transform:uppercase;}
+  .nav .gear{width:15px;height:15px;border:1.5px solid var(--ink);border-radius:50%;opacity:.7;}
+
+  .mono{font-family:"JetBrains Mono",monospace;}
+
+  /* galleries grid */
+  .body{padding:16px 16px;overflow:hidden;flex:1;}
+  .ggrid{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+  .card .ph{aspect-ratio:1/1.12;border-radius:3px;}
+  .card .meta{display:flex;justify-content:space-between;align-items:baseline;margin-top:7px;}
+  .card .name{font-size:12px;font-weight:500;}
+  .card .ct{font-size:10px;color:var(--muted);}
+
+  /* tight gallery grid */
+  .tgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+  .tgrid .ph{aspect-ratio:1/1;border-radius:2px;}
+  .hint{position:absolute;left:0;right:0;bottom:0;padding:12px 16px;background:linear-gradient(transparent,var(--screen) 60%);text-align:center;font-size:10px;letter-spacing:.06em;color:var(--muted);}
+
+  /* show mode bar */
+  .showbar{padding:11px 18px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--hair);background:var(--ink);color:var(--paper);}
+  .showbar .l{font-size:10px;font-weight:600;letter-spacing:.3em;text-transform:uppercase;}
+  .showbar .sw{width:34px;height:18px;border-radius:10px;background:var(--paper);position:relative;}
+  .showbar .sw::after{content:"";position:absolute;right:2px;top:2px;width:14px;height:14px;border-radius:50%;background:var(--ink);}
+
+  .blur5{filter:blur(7px);opacity:.5;}
+  .keep{box-shadow:0 8px 22px -10px rgba(23,20,15,.5);}
+
+  /* photo placeholder palette (muted, warm — photos provide the only color) */
+  .p1{background:linear-gradient(150deg,#cfc6b4,#b3a892);}
+  .p2{background:linear-gradient(150deg,#c2b9a6,#9c917b);}
+  .p3{background:linear-gradient(150deg,#d8d0c0,#bcb29c);}
+  .p4{background:linear-gradient(150deg,#b8ad97,#8d8268);}
+  .p5{background:linear-gradient(150deg,#cdc4b1,#a89d86);}
+  .p6{background:linear-gradient(150deg,#c7bda9,#978c74);}
+  .p7{background:linear-gradient(150deg,#bcb39f,#a99e85);}
+
+  .note{margin-top:clamp(36px,6vh,56px);max-width:64ch;color:var(--muted);font-size:13px;line-height:1.7;border-top:1px solid var(--hair);padding-top:24px;}
+  .note b{color:var(--ink);font-weight:500;}
+</style>
+</head>
+<body>
+
+  <div class="head">
+    <span class="label">Blur · Design direction · for reaction</span>
+    <h1>The photos are the only color. The interface is a hairline that disappears.</h1>
+    <p>Nuke restraint in a calm skin: monochrome chrome, hairline structure, counts in monospace, one flourish — the blur. Not the built app; the bar it must meet.</p>
+  </div>
+
+  <div class="rail">
+
+    <!-- SCREEN 1 — HOME / GALLERIES -->
+    <div class="device">
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span class="mono">9:41</span><span class="dots"><span>􀙇</span><span class="mono">100</span></span></div>
+        <div class="nav"><span class="word">Blur</span><span class="gear"></span></div>
+        <div class="body">
+          <div class="ggrid">
+            <div class="card"><div class="ph p4"></div><div class="meta"><span class="name">Garage</span><span class="ct mono">248</span></div></div>
+            <div class="card"><div class="ph p2"></div><div class="meta"><span class="name">Skye</span><span class="ct mono">1,204</span></div></div>
+            <div class="card"><div class="ph p3"></div><div class="meta"><span class="name">Builds</span><span class="ct mono">512</span></div></div>
+            <div class="card"><div class="ph p1"></div><div class="meta"><span class="name">Trips</span><span class="ct mono">863</span></div></div>
+          </div>
+        </div>
+      </div></div>
+      <span class="caption">Home — your galleries</span>
+    </div>
+
+    <!-- SCREEN 2 — A GALLERY (curate) -->
+    <div class="device">
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span class="mono">9:41</span><span class="dots"><span>􀙇</span><span class="mono">100</span></span></div>
+        <div class="nav"><span class="word">Garage · <span class="mono" style="letter-spacing:0">248</span></span><span class="gear" style="border-radius:2px"></span></div>
+        <div class="body" style="padding:12px 12px 0;">
+          <div class="tgrid">
+            <div class="ph p1"></div><div class="ph p4"></div><div class="ph p2"></div>
+            <div class="ph p3 blur5"></div><div class="ph p5"></div><div class="ph p6"></div>
+            <div class="ph p2"></div><div class="ph p7 blur5"></div><div class="ph p1"></div>
+            <div class="ph p4"></div><div class="ph p3"></div><div class="ph p5"></div>
+          </div>
+          <div class="hint">Tap a photo to hide it</div>
+        </div>
+      </div></div>
+      <span class="caption">A gallery — tap to hide</span>
+    </div>
+
+    <!-- SCREEN 3 — SHOW MODE -->
+    <div class="device">
+      <div class="phone"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span class="mono">9:41</span><span class="dots"><span>􀙇</span><span class="mono">100</span></span></div>
+        <div class="showbar"><span class="l">Show mode</span><span class="sw"></span></div>
+        <div class="body" style="padding:12px 12px 0;">
+          <div class="tgrid">
+            <div class="ph p1 blur5"></div><div class="ph p4 keep"></div><div class="ph p2 blur5"></div>
+            <div class="ph p3 blur5"></div><div class="ph p5 blur5"></div><div class="ph p6 blur5"></div>
+            <div class="ph p2 blur5"></div><div class="ph p1 blur5"></div><div class="ph p4 blur5"></div>
+          </div>
+          <div class="hint">Showing 1 · the rest, softened</div>
+        </div>
+      </div></div>
+      <span class="caption">Show mode — present safely</span>
+    </div>
+
+  </div>
+
+  <p class="note">
+    <b>What you're judging here is restraint, not features.</b> No rounded blobby cards,
+    no shadows on content, no chrome competing with the images. The only typography
+    that isn't the photos: a hairline wordmark, a quiet name, and the count in
+    monospace — the one Nuke tell. The single moment of motion in the whole app is the
+    blur resolving in and out. If this feels <b>simple, perfect, calm</b>, it's right.
+    If anything feels like "an app," it's wrong, and we cut it. — Direction only; built in SwiftUI once you approve the language.
+  </p>
+
+</body>
+</html>
