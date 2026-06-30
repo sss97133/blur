@@ -26,6 +26,10 @@ final class LibraryEngine: ObservableObject {
     @Published private(set) var authorizationDenied = false
     @Published private(set) var lastScanDate: Date?
 
+    /// False until the first scan of this app session completes — lets the UI
+    /// show a loading state instead of an empty state during first launch.
+    @Published private(set) var didCompleteInitialScan = false
+
     /// True when the user granted access to only a SUBSET of their library
     /// (iOS limited-access mode). The UI surfaces Apple's own "select more
     /// photos" picker in this case — we never work around the limit, we use it.
@@ -90,6 +94,7 @@ final class LibraryEngine: ObservableObject {
         accessIsLimited = (PHPhotoLibrary.authorizationStatus(for: .readWrite) == .limited)
         defer {
             isScanning = false
+            didCompleteInitialScan = true
             lastScanDate = Date()
             defaults.set(lastScanDate, forKey: Key.lastScan)
         }

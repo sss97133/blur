@@ -15,20 +15,9 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 Section {
-                    HStack {
-                        Image(systemName: "wand.and.stars")
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Automatic organization")
-                                .font(.subheadline.weight(.semibold))
-                            Text("Connect your own AI — a local model or your own subscription — and let Blur build and complete your galleries for you. Your photos stay yours; processing runs through the provider you choose. Coming soon.")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                } header: {
-                    Text("Upgrade")
+                    LabeledContent("Automatic organization", value: "Coming soon")
                 } footer: {
-                    Text("Free stays free and anonymous. Upgrading is optional and never required to use Blur.")
+                    Text("Let Blur organize for you, powered by AI you bring. Optional — free stays free and anonymous.")
                 }
 
                 Section {

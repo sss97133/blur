@@ -14,6 +14,7 @@ struct AssetThumbnail: View {
     /// When true, the image is rendered with a heavy blur (the "hidden" state).
     var blurred: Bool = false
 
+    @Environment(\.displayScale) private var displayScale
     @State private var image: UIImage?
 
     var body: some View {
@@ -30,17 +31,20 @@ struct AssetThumbnail: View {
         }
         .frame(width: side, height: side)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius))
+        // The one flourish the doctrine allows: the blur resolving in and out,
+        // on the system default curve — never a bespoke timing.
+        .animation(.default, value: blurred)
         // Decorative — the enclosing card/button carries the accessible label.
         .accessibilityHidden(true)
         .task(id: assetIdentifier) {
-            image = await Self.loadThumbnail(for: assetIdentifier, side: side)
+            image = await Self.loadThumbnail(for: assetIdentifier, side: side, scale: displayScale)
         }
     }
 
     /// Fetch the asset by identifier and request a square thumbnail.
     /// deliveryMode .highQualityFormat ⇒ the handler fires exactly once, so the
     /// checked continuation cannot double-resume.
-    private static func loadThumbnail(for identifier: String, side: CGFloat) async -> UIImage? {
+    private static func loadThumbnail(for identifier: String, side: CGFloat, scale: CGFloat) async -> UIImage? {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
         guard let asset = fetch.firstObject else { return nil }
 
@@ -49,7 +53,6 @@ struct AssetThumbnail: View {
         options.resizeMode = .fast
         options.isNetworkAccessAllowed = false   // thumbs are local-only
 
-        let scale = await MainActor.run { UIScreen.main.scale }
         let target = CGSize(width: side * scale, height: side * scale)
 
         return await withCheckedContinuation { continuation in

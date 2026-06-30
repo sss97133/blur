@@ -25,6 +25,12 @@ struct GalleryFocusView: View {
         showMode ? gallery.assetIDs.filter { !library.isHidden($0) } : gallery.assetIDs
     }
 
+    /// Whether anything in this gallery is already hidden — drives the
+    /// one-time, self-dismissing hint below.
+    private var hasHidden: Bool {
+        gallery.assetIDs.contains { library.isHidden($0) }
+    }
+
     var body: some View {
         ScrollView {
             LazyVGrid(columns: columns, spacing: 4) {
@@ -58,8 +64,9 @@ struct GalleryFocusView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if !showMode {
-                Text("Tap a photo to hide it. Turn on Show mode to present this gallery safely.")
+            // One-time, self-dismissing: gone the moment the gesture is used.
+            if !showMode && !hasHidden {
+                Text("Tap a photo to hide it")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)

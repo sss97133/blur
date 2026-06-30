@@ -19,7 +19,11 @@ struct GalleriesView: View {
                 if library.authorizationDenied {
                     permissionPrompt
                 } else if library.galleries.isEmpty {
-                    emptyState
+                    if library.didCompleteInitialScan {
+                        emptyState
+                    } else {
+                        ProgressView().controlSize(.large)
+                    }
                 } else {
                     grid
                 }

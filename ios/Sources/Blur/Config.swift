@@ -16,14 +16,6 @@ enum Config {
     /// in project.yml.
     static let refreshTaskID = "ag.nuke.blur.refresh"
 
-    // ─── Scan tuning ─────────────────────────────────────────────────────────
-    /// Smart-album subtypes surfaced as galleries in v0, in display order.
-    /// These are Apple's own on-device classifications — the free "seed" layer.
-    /// (User-created albums are always surfaced first, ahead of these.)
-
-    /// Max thumbnails to keep warm per gallery cover render.
-    static let coverThumbnailSide: CGFloat = 160
-
     // ─── Paid upgrade backend (NOT v0) ───────────────────────────────────────
     // When automatic image handling ships, point these at a NEW, dedicated
     // Supabase project — NOT Nuke production (qkgaybvrernstplzjaam). The free
