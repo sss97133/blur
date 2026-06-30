@@ -1,0 +1,13 @@
+# Xcode / XcodeGen (generated, never committed)
+ios/Blur.xcodeproj/
+ios/Generated/
+**/xcuserdata/
+**/DerivedData/
+*.xcuserstate
+
+# macOS
+.DS_Store
+
+# Node / Vercel (if the web dir grows a build step)
+node_modules/
+.vercel/
