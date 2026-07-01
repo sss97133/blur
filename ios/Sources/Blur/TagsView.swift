@@ -67,6 +67,7 @@ struct TagsView: View {
 
     private var list: some View {
         List {
+            highlightsSection
             // Derived intelligence first — who and what — then Apple's types.
             peopleSection
             subjectsSection
@@ -80,6 +81,55 @@ struct TagsView: View {
                 }
             }
         }
+    }
+
+    // ── Highlights: what matters most, staring at you ──
+    @ViewBuilder
+    private var highlightsSection: some View {
+        if !library.personFacets.isEmpty || !library.subjectFacets.isEmpty {
+            Section {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 14) {
+                        ForEach(library.personFacets.prefix(4), id: \.person.id) { facet in
+                            NavigationLink(value: PersonRef(id: facet.person.id)) {
+                                highlightCard(cover: facet.person.cover, symbol: nil,
+                                              title: facet.person.name ?? "Person", count: facet.count, round: true)
+                            }.buttonStyle(.plain)
+                        }
+                        ForEach(library.subjectFacets.prefix(8), id: \.label) { facet in
+                            NavigationLink(value: SubjectRef(label: facet.label)) {
+                                highlightCard(cover: nil, symbol: "sparkle",
+                                              title: facet.label, count: facet.count, round: false)
+                            }.buttonStyle(.plain)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .listRowInsets(EdgeInsets(top: 8, leading: 12, bottom: 8, trailing: 12))
+            } header: {
+                Text("Highlights")
+            } footer: {
+                Text("Your most-photographed people and subjects — what you actually spend time on.")
+            }
+        }
+    }
+
+    private func highlightCard(cover: String?, symbol: String?, title: String, count: Int, round: Bool) -> some View {
+        VStack(spacing: 5) {
+            Group {
+                if let cover {
+                    AssetThumbnail(assetIdentifier: cover, side: 64, cornerRadius: round ? 32 : 12)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color(.tertiarySystemFill))
+                        .frame(width: 64, height: 64)
+                        .overlay { Image(systemName: symbol ?? "tag").font(.title3).foregroundStyle(.secondary) }
+                }
+            }
+            Text(title).font(.caption).lineLimit(1)
+            Text("\(count)").font(.caption2).foregroundStyle(.secondary)
+        }
+        .frame(width: 76)
     }
 
     // ── People (on-device face clustering) ──
