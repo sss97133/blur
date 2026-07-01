@@ -8,6 +8,7 @@ import UIKit
 struct LibraryView: View {
     @EnvironmentObject private var library: LibraryEngine
     @State private var showSettings = false
+    @State private var showLibraries = false
     @State private var searchText = ""
 
     /// Search filters the grid; empty = the whole library.
@@ -52,6 +53,12 @@ struct LibraryView: View {
                     }
                     .accessibilityLabel("Settings")
                 }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showLibraries = true } label: {
+                        Image(systemName: "books.vertical")
+                    }
+                    .accessibilityLabel("Libraries")
+                }
             }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
                         prompt: "Search your photos")
@@ -61,6 +68,7 @@ struct LibraryView: View {
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
+            .sheet(isPresented: $showLibraries) { LibrariesView() }
             // No pull-to-refresh: the library change observer already rescans on
             // real changes, and the refresh gesture fought drag-to-dismiss.
         }

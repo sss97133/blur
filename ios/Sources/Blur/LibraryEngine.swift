@@ -93,6 +93,14 @@ final class LibraryEngine: ObservableObject {
     @Published private(set) var blurredSubjects: Set<String> = []
     @Published private(set) var subjectBlurredIDs: Set<String> = []
 
+    // ── Libraries (curated collections — the reclaimed word) ──
+    /// User-composed libraries (Family, Work…): a named set of people + subjects.
+    /// Derived from the tags, never touching the chronological archive itself.
+    @Published private(set) var libraries: [CuratedLibrary] = []
+    /// Which libraries are currently blurred (stackable — blur several at once).
+    @Published private(set) var blurredLibraryIDs: Set<UUID> = []
+    @Published private(set) var libraryBlurredIDs: Set<String> = []
+
     // ── People (on-device face clustering) ──
     /// One entry per clustered person (representative vector + cover).
     @Published private(set) var personReps: [Person] = []
@@ -109,6 +117,7 @@ final class LibraryEngine: ObservableObject {
         static let lastScan = "lastScanDate"
         static let blurredCategories = "blurredCategoryIDs"
         static let blurredSubjects = "blurredSubjects"
+        static let blurredLibraries = "blurredLibraryIDs"
     }
 
     private var changeObserver: LibraryObserver?
@@ -127,6 +136,10 @@ final class LibraryEngine: ObservableObject {
         visionIndex = Self.loadVisionIndex()
         indexedCount = visionIndex.count
         personReps = Self.loadPeople()
+        libraries = Self.loadLibraries()
+        if let libs = defaults.stringArray(forKey: Key.blurredLibraries) {
+            blurredLibraryIDs = Set(libs.compactMap { UUID(uuidString: $0) })
+        }
         lastScanDate = defaults.object(forKey: Key.lastScan) as? Date
         recomputeSubjectBlurred()
     }
@@ -202,6 +215,7 @@ final class LibraryEngine: ObservableObject {
             galleries = result.galleries
             recomputeRuleBlurred()   // new photos in a tagged category blur automatically
         }
+        recomputeLibraryBlurred()
 
         let photos = result.galleries.reduce(0) { $0 + $1.count }
         lastScan = ScanSummary(galleries: result.galleries.count, userAlbums: result.userAlbums,
@@ -297,11 +311,12 @@ final class LibraryEngine: ObservableObject {
     // ─── Hidden (blur/curate) state ──────────────────────────────────────────
 
     /// A photo is blurred if hidden by hand, OR it carries an auto-blur tag
-    /// (category), OR it carries an auto-blur subject (Vision).
+    /// (category / subject), OR it belongs to a blurred library.
     func isHidden(_ assetID: String) -> Bool {
         hiddenAssetIDs.contains(assetID)
             || ruleBlurredIDs.contains(assetID)
             || subjectBlurredIDs.contains(assetID)
+            || libraryBlurredIDs.contains(assetID)
     }
 
     func toggleHidden(_ assetID: String) {
@@ -388,6 +403,7 @@ final class LibraryEngine: ObservableObject {
         personReps = reps
         indexedCount = work.count
         recomputeSubjectBlurred()
+        recomputeLibraryBlurred()
         Self.saveVisionIndex(work)
         Self.savePeople(reps)
         indexing = false
@@ -483,6 +499,71 @@ final class LibraryEngine: ObservableObject {
         visionIndex.values.reduce(0) { $0 + ($1.subjects.contains(label) ? 1 : 0) }
     }
 
+    // ─── Libraries (curated collections) ─────────────────────────────────────
+
+    /// The photos in a library — union of its people's and subjects' photos.
+    func assets(inLibrary library: CuratedLibrary) -> [String] {
+        let people = Set(library.personIDs), subjects = Set(library.subjects)
+        return allPhotoIDs.filter { id in
+            guard let v = visionIndex[id] else { return false }
+            return !Set(v.people).isDisjoint(with: people)
+                || !Set(v.subjects).isDisjoint(with: subjects)
+        }
+    }
+
+    @discardableResult
+    func createLibrary(name: String) -> UUID {
+        let lib = CuratedLibrary(id: UUID(), name: name, personIDs: [], subjects: [])
+        libraries.append(lib)
+        saveLibraries()
+        return lib.id
+    }
+
+    func renameLibrary(_ id: UUID, to name: String) {
+        guard let i = libraries.firstIndex(where: { $0.id == id }) else { return }
+        libraries[i].name = name
+        saveLibraries()
+    }
+
+    func deleteLibrary(_ id: UUID) {
+        libraries.removeAll { $0.id == id }
+        blurredLibraryIDs.remove(id)
+        saveLibraries()
+        recomputeLibraryBlurred()
+    }
+
+    func setMember(_ id: UUID, person: Int, _ include: Bool) {
+        guard let i = libraries.firstIndex(where: { $0.id == id }) else { return }
+        if include { if !libraries[i].personIDs.contains(person) { libraries[i].personIDs.append(person) } }
+        else { libraries[i].personIDs.removeAll { $0 == person } }
+        saveLibraries(); recomputeLibraryBlurred()
+    }
+
+    func setMember(_ id: UUID, subject: String, _ include: Bool) {
+        guard let i = libraries.firstIndex(where: { $0.id == id }) else { return }
+        if include { if !libraries[i].subjects.contains(subject) { libraries[i].subjects.append(subject) } }
+        else { libraries[i].subjects.removeAll { $0 == subject } }
+        saveLibraries(); recomputeLibraryBlurred()
+    }
+
+    func isLibraryBlurred(_ id: UUID) -> Bool { blurredLibraryIDs.contains(id) }
+
+    func setLibraryBlur(_ id: UUID, _ on: Bool) {
+        if on { blurredLibraryIDs.insert(id) } else { blurredLibraryIDs.remove(id) }
+        defaults.set(blurredLibraryIDs.map(\.uuidString), forKey: Key.blurredLibraries)
+        recomputeLibraryBlurred()
+    }
+
+    private func recomputeLibraryBlurred() {
+        var ids = Set<String>()
+        for lib in libraries where blurredLibraryIDs.contains(lib.id) {
+            ids.formUnion(assets(inLibrary: lib))
+        }
+        libraryBlurredIDs = ids
+    }
+
+    private func saveLibraries() { Self.saveLibraries(libraries) }
+
     func isSubjectBlurred(_ label: String) -> Bool { blurredSubjects.contains(label) }
 
     /// "Blur anything automotive" — flip a subject; every photo Vision tagged
@@ -538,6 +619,23 @@ final class LibraryEngine: ObservableObject {
         }
     }
 
+    nonisolated private static var librariesURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("libraries.json")
+    }
+    nonisolated static func loadLibraries() -> [CuratedLibrary] {
+        guard let data = try? Data(contentsOf: librariesURL),
+              let libs = try? JSONDecoder().decode([CuratedLibrary].self, from: data) else { return [] }
+        return libs
+    }
+    nonisolated static func saveLibraries(_ libs: [CuratedLibrary]) {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(libs) {
+            try? data.write(to: librariesURL, options: .atomic)
+        }
+    }
+
     // ─── Limited-library access (SDK-max, not worked around) ─────────────────
 
     /// Present Apple's own "select more photos" sheet. The change observer
@@ -585,6 +683,15 @@ enum ViewMode: String, CaseIterable {
 struct AssetMeta {
     let date: Date?
     let burstID: String?
+}
+
+/// A curated library — a named collection composed from tags (people + subjects).
+/// Derived, switchable, blur-able; never touches the chronological archive.
+struct CuratedLibrary: Codable, Identifiable, Hashable {
+    let id: UUID
+    var name: String
+    var personIDs: [Int]
+    var subjects: [String]
 }
 
 /// The scan's product, carried back from the background task to the main actor.
