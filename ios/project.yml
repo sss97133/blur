@@ -46,6 +46,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ag.nuke.blur
         PRODUCT_NAME: Blur
+        DEVELOPMENT_TEAM: JZ28MFU3VB          # Skylar Williams — pinned for CLI archive/upload
         MARKETING_VERSION: "1.0.0"
         # CFBundleVersion is stamped by generate.sh (seconds since 2024-01-01),
         # so it is always monotonic — never hand-bump it. App Store Connect
