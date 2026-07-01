@@ -139,8 +139,8 @@ final class LibraryEngine: ObservableObject {
         if let subs = defaults.stringArray(forKey: Key.blurredSubjects) {
             blurredSubjects = Set(subs)
         }
-        visionIndex = Self.loadVisionIndex()
-        indexedCount = visionIndex.count
+        // visionIndex is potentially huge (79k) — decoding it on the main thread
+        // here blocks launch, so it loads off-main in start() instead.
         personReps = Self.loadPeople()
         libraries = Self.loadLibraries()
         if let libs = defaults.stringArray(forKey: Key.blurredLibraries) {
@@ -180,6 +180,18 @@ final class LibraryEngine: ObservableObject {
             if !cached.isEmpty {
                 allPhotoIDs = cached
                 didCompleteInitialScan = true
+            }
+        }
+
+        // Load the heavy Vision index off the main thread, then apply the blur
+        // decisions — so launch isn't blocked decoding 79k entries.
+        if visionIndex.isEmpty {
+            let loaded = await Task.detached(priority: .utility) { Self.loadVisionIndex() }.value
+            if !loaded.isEmpty {
+                visionIndex = loaded
+                indexedCount = loaded.count
+                recomputeSubjectBlurred()
+                recomputeLibraryBlurred()
             }
         }
 
@@ -430,13 +442,18 @@ final class LibraryEngine: ObservableObject {
             work[id] = PhotoVision(subjects: Array(vt.subjects.prefix(5).map { $0.label }),
                                    text: vt.text, people: Array(people))
             processed += 1
-            if processed % 40 == 0 {                 // batch UI updates + checkpoints
+            if processed % 200 == 0 {                // batch UI updates + checkpoints
                 visionIndex = work
                 personReps = reps
                 indexedCount = work.count
                 recomputeSubjectBlurred()
-                Self.saveVisionIndex(work)
-                Self.savePeople(reps)
+                recomputeLibraryBlurred()
+                // Encode + write off the main thread — the dict is large.
+                let snapIdx = work, snapPeople = reps
+                Task.detached(priority: .background) {
+                    Self.saveVisionIndex(snapIdx)
+                    Self.savePeople(snapPeople)
+                }
             }
         }
         visionIndex = work
@@ -444,8 +461,11 @@ final class LibraryEngine: ObservableObject {
         indexedCount = work.count
         recomputeSubjectBlurred()
         recomputeLibraryBlurred()
-        Self.saveVisionIndex(work)
-        Self.savePeople(reps)
+        let finalIdx = work, finalPeople = reps
+        Task.detached(priority: .background) {
+            Self.saveVisionIndex(finalIdx)
+            Self.savePeople(finalPeople)
+        }
         indexing = false
     }
 
