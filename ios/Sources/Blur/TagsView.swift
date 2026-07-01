@@ -101,7 +101,7 @@ struct TagsView: View {
             }
             if !library.indexing && library.unindexedCount > 0 {
                 Button {
-                    Task { await library.indexLibrary() }
+                    Task(priority: .utility) { await library.indexLibrary() }
                 } label: {
                     Label(library.visionIndex.isEmpty
                           ? "Read \(library.allPhotoIDs.count) photos"

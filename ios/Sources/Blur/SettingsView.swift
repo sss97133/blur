@@ -47,6 +47,22 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    Picker("Analyze", selection: $library.indexIntensity) {
+                        ForEach(IndexIntensity.allCases, id: \.self) { i in
+                            Text(i.label).tag(i)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    if library.indexing {
+                        LabeledContent("Progress", value: "\(library.indexedCount)/\(library.allPhotoIDs.count)")
+                    }
+                } header: {
+                    Text("Vision")
+                } footer: {
+                    Text("How hard Blur reads your photos on device. Gentle paces itself and backs off when the phone warms up; Fast is quicker but hotter; Off analyzes only when you tap “Read” in Tags. It runs below the app so scrolling stays smooth.")
+                }
+
+                Section {
                     VStack(alignment: .leading) {
                         Text("Face matching: \(Int(library.faceThreshold))")
                         Slider(value: $library.faceThreshold, in: 5...40, step: 1)

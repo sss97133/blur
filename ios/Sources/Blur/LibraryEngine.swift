@@ -88,6 +88,12 @@ final class LibraryEngine: ObservableObject {
     @Published private(set) var visionIndex: [String: PhotoVision] = [:]
     @Published private(set) var indexing = false
     @Published private(set) var indexedCount = 0
+    /// How hard Vision works — Off (only when you ask), Gentle (paced, backs off
+    /// when hot), Fast. Default Gentle so the phone stays cool and smooth.
+    @Published var indexIntensity: IndexIntensity =
+        IndexIntensity(rawValue: UserDefaults.standard.string(forKey: "indexIntensity") ?? "") ?? .gentle {
+        didSet { defaults.set(indexIntensity.rawValue, forKey: "indexIntensity") }
+    }
     /// Subject labels chosen to auto-blur ("Vehicle" → blur every car). This is
     /// "blur anything automotive," on-device.
     @Published private(set) var blurredSubjects: Set<String> = []
@@ -228,10 +234,10 @@ final class LibraryEngine: ObservableObject {
         }
 
         // Keep Vision working through the library continuously — auto-resume the
-        // index whenever there's unread work, regardless of what page the user is
-        // on. indexLibrary() guards against double-running and skips the done.
-        if !indexing && unindexedCount > 0 {
-            Task { await indexLibrary() }
+        // index whenever there's unread work (unless Off), at low priority so the
+        // UI always wins. indexLibrary() guards double-runs and skips the done.
+        if indexIntensity != .off && !indexing && unindexedCount > 0 {
+            Task(priority: .utility) { await indexLibrary() }
         }
         return true
     }
@@ -381,8 +387,18 @@ final class LibraryEngine: ObservableObject {
         var nextPersonID = (reps.map { $0.id }.max() ?? 0) + 1
         var processed = 0
         for id in allPhotoIDs where work[id] == nil {
-            if Task.isCancelled { break }
+            if Task.isCancelled || indexIntensity == .off { break }
             let vt = await VisionTagger.tags(for: id)
+
+            // Throttle: a breath between photos, longer when the phone is warm,
+            // so indexing stays a cool trickle instead of pinning the chip.
+            var pause = indexIntensity.pauseMs
+            switch ProcessInfo.processInfo.thermalState {
+            case .serious: pause += 600
+            case .critical: pause += 2000
+            default: break
+            }
+            if pause > 0 { try? await Task.sleep(nanoseconds: pause * 1_000_000) }
 
             // Cluster this photo's faces into people (greedy nearest-rep).
             var people = Set<Int>()
@@ -665,6 +681,27 @@ final class LibraryEngine: ObservableObject {
         var top = scene?.keyWindow?.rootViewController
         while let presented = top?.presentedViewController { top = presented }
         return top
+    }
+}
+
+/// How aggressively the Vision index runs.
+enum IndexIntensity: String, CaseIterable {
+    case off, gentle, fast
+
+    var label: String {
+        switch self {
+        case .off: return "Off"
+        case .gentle: return "Gentle"
+        case .fast: return "Fast"
+        }
+    }
+    /// Breath between photos, in ms — the throttle.
+    var pauseMs: UInt64 {
+        switch self {
+        case .off: return 0
+        case .gentle: return 120
+        case .fast: return 15
+        }
     }
 }
 

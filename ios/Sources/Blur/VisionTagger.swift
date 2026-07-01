@@ -64,7 +64,7 @@ enum VisionTagger {
             mode: .aspectFit, crisp: true, allowsNetwork: true),
               let cg = image.cgImage else { return VisionTags() }
 
-        return await Task.detached(priority: .userInitiated) {
+        return await Task.detached(priority: .utility) {
             var result = VisionTags()
             let classify = VNClassifyImageRequest()
             let faces = VNDetectFaceRectanglesRequest()
