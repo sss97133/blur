@@ -30,6 +30,18 @@ struct FastPhotoGrid: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
+    /// Cheap content fingerprint — count + a strided id sample — so a real change
+    /// is detected without allocating two full id arrays on every SwiftUI pass.
+    static func unitsSignature(_ units: [GridUnit]) -> Int {
+        var h = Hasher()
+        h.combine(units.count)
+        let stride = max(1, units.count / 32)
+        var i = 0
+        while i < units.count { h.combine(units[i].id); i += stride }
+        if let last = units.last { h.combine(last.id) }
+        return h.finalize()
+    }
+
     func makeUIView(context: Context) -> UICollectionView {
         let layout = UICollectionViewFlowLayout()
         layout.minimumInteritemSpacing = spacing
@@ -50,11 +62,13 @@ struct FastPhotoGrid: UIViewRepresentable {
 
     func updateUIView(_ cv: UICollectionView, context: Context) {
         let coord = context.coordinator
-        let unitsChanged = coord.parent.units.map(\.id) != units.map(\.id)
+        let sig = Self.unitsSignature(units)
+        let unitsChanged = coord.unitsSig != sig
         coord.parent = self
+        coord.unitsSig = sig
         coord.applyItemSize()
         if unitsChanged {
-            cv.reloadData()
+            coord.resolveAndReload()   // batched off-main asset fetch, then reload
         } else {
             // Blur / selection state may have changed — refresh visible cells cheaply.
             for cell in cv.visibleCells {
@@ -74,8 +88,59 @@ struct FastPhotoGrid: UIViewRepresentable {
         let manager = PHCachingImageManager()
         private var assetCache: [String: PHAsset] = [:]
         private var pinchStart = 3
+        /// A cheap fingerprint of the current units — so updateUIView detects a
+        /// real content change without allocating two 79k string arrays per pass.
+        var unitsSig = 0
+        /// True while a batched PHAsset resolve is in flight (first load / new set).
+        private var resolving = false
+        private var resolveToken = 0
 
         init(_ parent: FastPhotoGrid) { self.parent = parent }
+
+        /// Resolve EVERY unit's cover asset in ONE batched PhotoKit fetch, off the
+        /// main thread, then reload — instead of a per-cell one-id query on the
+        /// main thread (the thing that made this not Photos-smooth). After this,
+        /// cellForItem/prefetch are pure dictionary hits.
+        func resolveAndReload() {
+            guard let cv = collectionView else { return }
+            let ids = Array(Set(parent.units.compactMap { $0.assetIDs.first }))
+            let missing = ids.filter { assetCache[$0] == nil }
+            guard !missing.isEmpty else { cv.reloadData(); return }
+            resolving = true
+            resolveToken &+= 1
+            let token = resolveToken
+            Task.detached(priority: .userInitiated) {
+                var found: [String: PHAsset] = [:]
+                found.reserveCapacity(missing.count)
+                let res = PHAsset.fetchAssets(withLocalIdentifiers: missing, options: nil)
+                res.enumerateObjects { a, _, _ in found[a.localIdentifier] = a }
+                let resolved = found
+                await MainActor.run {
+                    guard self.resolveToken == token else { return }   // superseded
+                    for (k, v) in resolved { self.assetCache[k] = v }
+                    self.resolving = false
+                    cv.reloadData()
+                }
+            }
+        }
+
+        /// Fallback for a lone cache miss after the bulk resolve (rare — e.g. an
+        /// incrementally-appended id). Async, off the main thread, patches the one
+        /// cell when it lands. Suppressed while the bulk resolve is running.
+        private func resolveOne(_ id: String, for cell: PhotoCell, px: CGFloat) {
+            guard !resolving, !id.isEmpty else { return }
+            Task.detached(priority: .userInitiated) {
+                let a = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
+                guard let a else { return }
+                await MainActor.run {
+                    self.assetCache[id] = a
+                    guard let cv = self.collectionView, let ip = cv.indexPath(for: cell),
+                          ip.item < self.parent.units.count,
+                          self.parent.units[ip.item].assetIDs.first == id else { return }
+                    cell.load(assetID: id, asset: a, targetPx: px, manager: self.manager)
+                }
+            }
+        }
 
         func side() -> CGFloat {
             guard let cv = collectionView, cv.bounds.width > 0 else { return 100 }
@@ -89,13 +154,10 @@ struct FastPhotoGrid: UIViewRepresentable {
             if layout.itemSize.width != s { layout.itemSize = CGSize(width: s, height: s); layout.invalidateLayout() }
         }
 
-        /// Resolve a PHAsset for an id, caching to avoid refetching.
-        func asset(_ id: String) -> PHAsset? {
-            if let a = assetCache[id] { return a }
-            let a = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
-            if let a { assetCache[id] = a }
-            return a
-        }
+        /// Cache-only asset lookup — NEVER a synchronous fetch on the main thread.
+        /// The cache is filled in bulk by resolveAndReload(); misses fall back to
+        /// an async resolveOne (see cellForItem).
+        func asset(_ id: String) -> PHAsset? { assetCache[id] }
 
         // Data source
         func collectionView(_ cv: UICollectionView, numberOfItemsInSection section: Int) -> Int { parent.units.count }
@@ -105,7 +167,9 @@ struct FastPhotoGrid: UIViewRepresentable {
             let unit = parent.units[ip.item]
             let id = unit.assetIDs.first ?? ""
             let px = side() * cv.traitCollection.displayScale
-            cell.load(assetID: id, asset: asset(id), targetPx: px, manager: manager)
+            let a = assetCache[id]
+            cell.load(assetID: id, asset: a, targetPx: px, manager: manager)
+            if a == nil { resolveOne(id, for: cell, px: px) }   // async fill, off-main
             decorate(cell, at: ip)
             return cell
         }
