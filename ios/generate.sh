@@ -21,5 +21,8 @@ xcodegen generate
 
 build_number="$(( $(date -u +%s) - 1704067200 ))"   # seconds since 2024-01-01 UTC
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${build_number}" Generated/Info.plist
+# The widget extension's build number must match the app's, or install/upload fails.
+[ -f Generated/BlurWidget-Info.plist ] && \
+  /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${build_number}" Generated/BlurWidget-Info.plist || true
 
 echo "✅ Blur.xcodeproj ready · CFBundleVersion ${build_number} (auto, monotonic) · MARKETING_VERSION from project.yml"

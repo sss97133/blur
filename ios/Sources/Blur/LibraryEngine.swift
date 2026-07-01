@@ -13,6 +13,7 @@ import Foundation
 import Photos
 import PhotosUI
 import UIKit
+import ActivityKit
 
 @MainActor
 final class LibraryEngine: ObservableObject {
@@ -416,6 +417,15 @@ final class LibraryEngine: ObservableObject {
         // newest-first. The work[id]==nil guard dedups the overlap.
         let favorites = galleries.first { $0.source == .smartAlbum && $0.title.lowercased().contains("favorite") }?.assetIDs ?? []
         let order = favorites + allPhotoIDs
+
+        // Live Activity — progress in the Dynamic Island while we read in the background.
+        var activity: Activity<IndexingAttributes>?
+        if ActivityAuthorizationInfo().areActivitiesEnabled {
+            let state = IndexingAttributes.ContentState(done: work.count, total: allPhotoIDs.count)
+            activity = try? Activity.request(attributes: IndexingAttributes(),
+                                             content: .init(state: state, staleDate: nil))
+        }
+
         for id in order where work[id] == nil {
             if Task.isCancelled || indexIntensity == .off { break }
             let vt = await VisionTagger.tags(for: id)
@@ -458,7 +468,14 @@ final class LibraryEngine: ObservableObject {
                     Self.saveVisionIndex(snapIdx)
                     Self.savePeople(snapPeople)
                 }
+                if let activity {
+                    await activity.update(.init(state: .init(done: work.count, total: allPhotoIDs.count), staleDate: nil))
+                }
             }
+        }
+        if let activity {
+            await activity.end(.init(state: .init(done: work.count, total: allPhotoIDs.count), staleDate: nil),
+                               dismissalPolicy: .after(.now + 2))
         }
         visionIndex = work
         personReps = reps
