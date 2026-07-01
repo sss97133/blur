@@ -16,6 +16,7 @@ struct PhotoInspectorView: View {
     let assetID: String
     @EnvironmentObject private var library: LibraryEngine
     @State private var tags: PhotoTags?
+    @State private var vision: VisionTags?
     @State private var showAllMetadata = false
 
     private let groupOrder = ["Capture", "Image", "Camera", "Library"]
@@ -35,6 +36,7 @@ struct PhotoInspectorView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     if let tags {
                         header(tags)
+                        visionCard
                         exifCard(tags)
                         map(tags)
                     }
@@ -51,6 +53,53 @@ struct PhotoInspectorView: View {
             tags = TagExtractor.fastTags(for: asset)        // instant
             tags = await TagExtractor.fullTags(for: asset)  // + EXIF, place, size
         }
+        .task(id: assetID) {
+            vision = nil                                     // show "Analyzing…" on switch
+            vision = await VisionTagger.tags(for: assetID)   // on-device semantics
+        }
+    }
+
+    // ── Vision: what's IN the photo, computed on-device (Layer 2) ──
+    private var visionCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("Vision", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+                Spacer()
+                if let vision, vision.faceCount > 0 {
+                    Label("\(vision.faceCount)", systemImage: "person.fill")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+            if let vision {
+                if vision.subjects.isEmpty {
+                    Text(vision.faceCount > 0 ? "Faces detected." : "No subjects detected.")
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 6) {
+                            ForEach(vision.subjects) { tag in
+                                HStack(spacing: 4) {
+                                    Text(tag.label)
+                                    Text("\(tag.percent)%").foregroundStyle(.secondary)
+                                }
+                                .font(.caption)
+                                .padding(.horizontal, 10).padding(.vertical, 6)
+                                .background(Color(.tertiarySystemFill), in: Capsule())
+                            }
+                        }
+                    }
+                }
+            } else {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Analyzing on device…").font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding()
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
     }
 
     // ── Date + filename header ──
