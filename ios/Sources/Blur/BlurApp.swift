@@ -30,6 +30,8 @@ struct BlurApp: App {
                     .tabItem { Label("Library", systemImage: "photo.on.rectangle") }
                 GalleriesView()
                     .tabItem { Label("Albums", systemImage: "rectangle.stack") }
+                TagsView()
+                    .tabItem { Label("Tags", systemImage: "tag") }
             }
             .environmentObject(library)
         }
