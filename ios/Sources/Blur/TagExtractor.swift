@@ -66,11 +66,15 @@ enum TagExtractor {
     static func fullTags(for asset: PHAsset) async -> PhotoTags {
         var t = fastTags(for: asset)
         t.albumNames = albumNames(for: asset)   // reverse lookup — kept off the instant path
-        t.fileName = PHAssetResource.assetResources(for: asset).first?.originalFilename
+        if let resource = PHAssetResource.assetResources(for: asset).first {
+            t.fileName = resource.originalFilename
+            t.fileType = shortFileType(resource.uniformTypeIdentifier)
+        }
         if let loc = asset.location {
             t.placeName = await placeName(for: loc)   // raw coords are vague; show a name
         }
-        guard let props = await imageProperties(for: asset) else { return t }
+        guard let (props, byteCount) = await imageProperties(for: asset) else { return t }
+        t.fileSizeBytes = byteCount
 
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]
         let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
@@ -84,12 +88,28 @@ enum TagExtractor {
         t.aperture = (exif?[kCGImagePropertyExifFNumber] as? NSNumber)?.doubleValue
         t.focalLength = (exif?[kCGImagePropertyExifFocalLength] as? NSNumber)?.doubleValue
         t.shutter = (exif?[kCGImagePropertyExifExposureTime] as? NSNumber)?.doubleValue
+        t.exposureBias = (exif?[kCGImagePropertyExifExposureBiasValue] as? NSNumber)?.doubleValue
         return t
     }
 
-    /// Pull just the image-properties dictionary (EXIF/TIFF) without decoding
-    /// the bitmap. Allowed to hit the network for iCloud-optimized originals.
-    private static func imageProperties(for asset: PHAsset) async -> [CFString: Any]? {
+    /// Turn a UTI ("public.jpeg", "public.heic") into Apple's short badge text.
+    private static func shortFileType(_ uti: String) -> String? {
+        switch uti.lowercased() {
+        case let u where u.contains("jpeg"): return "JPEG"
+        case let u where u.contains("heic"), let u where u.contains("heif"): return "HEIC"
+        case let u where u.contains("png"): return "PNG"
+        case let u where u.contains("dng"), let u where u.contains("raw"): return "RAW"
+        case let u where u.contains("gif"): return "GIF"
+        case let u where u.contains("tiff"): return "TIFF"
+        default:
+            return uti.split(separator: ".").last.map { $0.uppercased() }
+        }
+    }
+
+    /// Pull the image-properties dictionary (EXIF/TIFF) and the original byte
+    /// size without decoding the bitmap. Allowed to hit the network for
+    /// iCloud-optimized originals.
+    private static func imageProperties(for asset: PHAsset) async -> (props: [CFString: Any], bytes: Int)? {
         let options = PHImageRequestOptions()
         options.isNetworkAccessAllowed = true
         options.deliveryMode = .highQualityFormat
@@ -106,7 +126,7 @@ enum TagExtractor {
                     continuation.resume(returning: nil)
                     return
                 }
-                continuation.resume(returning: props)
+                continuation.resume(returning: (props, data.count))
             }
         }
     }
