@@ -113,38 +113,41 @@ final class LibraryEngine: ObservableObject {
             defaults.set(lastScanDate, forKey: Key.lastScan)
         }
 
-        // The whole library powers the Library tab (opens on your photos).
-        allPhotoIDs = Self.userLibraryIDs()
+        // CRITICAL: PhotoKit enumeration over a real (tens-of-thousands) library
+        // is heavy. Do it OFF the main thread — a synchronous scan on the main
+        // actor blocks long enough that iOS's watchdog kills the app on launch.
+        let result = await Task.detached(priority: .userInitiated) { () -> ScanResult in
+            let ids = Self.userLibraryIDs()
+            let userAlbums = Self.collectGalleries(in: .album, source: .userAlbum)
+            let smart = Self.smartGalleries()
+            let built = (userAlbums + smart)
+                .filter { $0.count > 0 }
+                .sorted { lhs, rhs in
+                    if lhs.source != rhs.source { return lhs.source == .userAlbum }
+                    return lhs.count > rhs.count
+                }
+            return ScanResult(allPhotoIDs: ids, galleries: built,
+                              userAlbums: userAlbums.count, smartAlbums: smart.count)
+        }.value
 
-        let userAlbums = collectGalleries(in: .album, source: .userAlbum)
-        let smart = smartGalleries()
+        // Publish on the main actor (we're back on it here).
+        allPhotoIDs = result.allPhotoIDs
+        galleries = result.galleries
 
-        // Drop empties (house rule: no empty shells) and sort user albums first,
-        // then by size descending.
-        let built = (userAlbums + smart)
-            .filter { $0.count > 0 }
-            .sorted { lhs, rhs in
-                if lhs.source != rhs.source { return lhs.source == .userAlbum }
-                return lhs.count > rhs.count
-            }
-        galleries = built
-
-        // The scan's pulse: stash the tally for Settings and log it, so a stuck
-        // or empty scan is visible instead of silent.
-        let photos = built.reduce(0) { $0 + $1.count }
-        lastScan = ScanSummary(galleries: built.count, userAlbums: userAlbums.count,
-                               smartAlbums: smart.count, photos: photos)
-        if built.isEmpty {
+        let photos = result.galleries.reduce(0) { $0 + $1.count }
+        lastScan = ScanSummary(galleries: result.galleries.count, userAlbums: result.userAlbums,
+                               smartAlbums: result.smartAlbums, photos: photos)
+        if result.galleries.isEmpty {
             NSLog("Blur scan: 0 galleries — library empty or PhotoKit returned nothing")
         } else {
             NSLog("Blur scan: %d galleries (%d user, %d smart), %d photos",
-                  built.count, userAlbums.count, smart.count, photos)
+                  result.galleries.count, result.userAlbums, result.smartAlbums, photos)
         }
         return true
     }
 
-    /// User-created albums.
-    private func collectGalleries(in type: PHAssetCollectionType, source: GallerySource) -> [Gallery] {
+    /// User-created albums. `nonisolated` so the scan runs off the main thread.
+    nonisolated private static func collectGalleries(in type: PHAssetCollectionType, source: GallerySource) -> [Gallery] {
         let collections = PHAssetCollection.fetchAssetCollections(with: type, subtype: .any, options: nil)
         var out: [Gallery] = []
         collections.enumerateObjects { collection, _, _ in
@@ -154,7 +157,7 @@ final class LibraryEngine: ObservableObject {
     }
 
     /// A curated set of Apple's smart albums — the free "seed" layer.
-    private func smartGalleries() -> [Gallery] {
+    nonisolated private static func smartGalleries() -> [Gallery] {
         // Note: the whole library ("Recents") is NOT here — it's the Library tab
         // (allPhotoIDs). These are the curated smart albums shown under Albums.
         let subtypes: [PHAssetCollectionSubtype] = [
@@ -178,7 +181,7 @@ final class LibraryEngine: ObservableObject {
     /// The whole photo library ("Recents") as asset ids, newest first — the
     /// Library tab. Guarantees the app is never empty for someone with photos
     /// but no albums; mirrors how Photos itself opens.
-    private static func userLibraryIDs() -> [String] {
+    nonisolated private static func userLibraryIDs() -> [String] {
         let cols = PHAssetCollection.fetchAssetCollections(
             with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: nil)
         guard let lib = cols.firstObject else { return [] }
@@ -193,7 +196,7 @@ final class LibraryEngine: ObservableObject {
     }
 
     /// Materialize one collection into a Gallery (image assets only, newest first).
-    private static func gallery(from collection: PHAssetCollection, source: GallerySource) -> Gallery? {
+    nonisolated private static func gallery(from collection: PHAssetCollection, source: GallerySource) -> Gallery? {
         let options = PHFetchOptions()
         options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
@@ -247,6 +250,14 @@ final class LibraryEngine: ObservableObject {
         while let presented = top?.presentedViewController { top = presented }
         return top
     }
+}
+
+/// The scan's product, carried back from the background task to the main actor.
+struct ScanResult {
+    let allPhotoIDs: [String]
+    let galleries: [Gallery]
+    let userAlbums: Int
+    let smartAlbums: Int
 }
 
 /// One scan's tally — the pulse surfaced in Settings and the console.

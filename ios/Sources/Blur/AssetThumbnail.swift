@@ -45,7 +45,9 @@ struct AssetThumbnail: View {
             image = await AssetImageLoader.load(
                 identifier: assetIdentifier,
                 target: CGSize(width: side * displayScale, height: side * displayScale),
-                mode: .aspectFill
+                mode: .aspectFill,
+                highQuality: false,     // grid: cheap + fast
+                allowsNetwork: false    // never pull originals from iCloud per tile
             )
         }
     }
@@ -88,16 +90,23 @@ struct AssetHeroImage: View {
 
 /// One PhotoKit image request, shared by both views above.
 enum AssetImageLoader {
-    /// deliveryMode .highQualityFormat ⇒ the handler fires exactly once, so the
-    /// checked continuation cannot double-resume.
-    static func load(identifier: String, target: CGSize, mode: PHImageContentMode) async -> UIImage? {
+    /// Both delivery modes below fire the handler EXACTLY ONCE (.fastFormat and
+    /// .highQualityFormat), so the checked continuation can never double-resume.
+    /// (.opportunistic would fire multiple times — never use it here.)
+    ///
+    /// Grid tiles pass highQuality:false, allowsNetwork:false — cheap, local,
+    /// and never triggering thousands of iCloud downloads while scrolling a big
+    /// library (the memory blowout that crashed the app). The inspector hero
+    /// passes the defaults for a sharp, iCloud-backed image.
+    static func load(identifier: String, target: CGSize, mode: PHImageContentMode,
+                     highQuality: Bool = true, allowsNetwork: Bool = true) async -> UIImage? {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
         guard let asset = fetch.firstObject else { return nil }
 
         let options = PHImageRequestOptions()
-        options.deliveryMode = .highQualityFormat   // fires once → safe for the continuation
-        options.resizeMode = .exact                 // crisp tiles, like Photos (.fast was soft)
-        options.isNetworkAccessAllowed = true       // fetch sharp originals from iCloud, like Photos
+        options.deliveryMode = highQuality ? .highQualityFormat : .fastFormat
+        options.resizeMode = highQuality ? .exact : .fast
+        options.isNetworkAccessAllowed = allowsNetwork
 
         return await withCheckedContinuation { continuation in
             PHImageManager.default().requestImage(
