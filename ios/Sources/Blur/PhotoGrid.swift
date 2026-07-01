@@ -30,7 +30,7 @@ struct PhotoGrid: View {
     @State private var columns = 3
     @GestureState private var pinch: CGFloat = 1
     private let minColumns = 1
-    private let maxColumns = 6
+    private let maxColumns = 10
     private let spacing: CGFloat = 1.5
 
     /// In Hidden mode, flagged photos drop out of the feed entirely.
@@ -86,11 +86,13 @@ struct PhotoGrid: View {
                 MagnifyGesture()
                     .updating($pinch) { value, state, _ in state = value.magnification }
                     .onEnded { value in
-                        let next: Int
-                        if value.magnification > 1.15 { next = max(minColumns, columns - 1) }
-                        else if value.magnification < 0.87 { next = min(maxColumns, columns + 1) }
-                        else { next = columns }
-                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { columns = next }
+                        // Map the whole pinch to a column count so ONE gesture
+                        // spans the full range (spread → fewer/bigger; pinch →
+                        // more/smaller), like Photos — not ±1 per gesture.
+                        let target = Int((Double(columns) / value.magnification).rounded())
+                        withAnimation(.spring(response: 0.30, dampingFraction: 0.85)) {
+                            columns = min(max(target, minColumns), maxColumns)
+                        }
                     }
             )
         }

@@ -24,10 +24,16 @@ struct AssetThumbnail: View {
 
     @State private var image: UIImage?
 
+    /// Prefer live @State, else the synchronous cache — so a recreated cell
+    /// (e.g. on a pinch column change) shows its image instantly, never white.
+    private var displayImage: UIImage? {
+        image ?? AssetImageLoader.cached(assetIdentifier, target: Self.loadTarget)
+    }
+
     var body: some View {
         Group {
-            if let image {
-                Image(uiImage: image)
+            if let img = displayImage {
+                Image(uiImage: img)
                     .resizable()
                     .scaledToFill()
                     .blur(radius: blurred ? 28 : 0)
@@ -96,8 +102,26 @@ struct AssetHeroImage: View {
     }
 }
 
-/// One PhotoKit image request, shared by both views above.
+/// One PhotoKit image request, shared by both views above — with an in-memory
+/// cache so a tile is NEVER blank if its image was ever loaded (kills the white
+/// flash on resize/scroll, the way Photos' caching image manager does).
 enum AssetImageLoader {
+    private static let cache: NSCache<NSString, UIImage> = {
+        let c = NSCache<NSString, UIImage>()
+        c.countLimit = 800          // NSCache also auto-evicts under memory pressure
+        return c
+    }()
+
+    private static func key(_ id: String, _ target: CGSize) -> NSString {
+        "\(id)@\(Int(target.width))" as NSString
+    }
+
+    /// Synchronous cache hit — used as an instant fallback before .task runs, so
+    /// a recreated cell shows its image immediately instead of flashing white.
+    static func cached(_ identifier: String, target: CGSize) -> UIImage? {
+        cache.object(forKey: key(identifier, target))
+    }
+
     /// Always .highQualityFormat: it fires the handler EXACTLY ONCE (so the
     /// checked continuation can't double-resume) and always returns an image
     /// (unlike .fastFormat, which yields nil when no fast thumbnail is cached —
@@ -117,7 +141,7 @@ enum AssetImageLoader {
         options.resizeMode = crisp ? .exact : .fast
         options.isNetworkAccessAllowed = allowsNetwork
 
-        return await withCheckedContinuation { continuation in
+        let image: UIImage? = await withCheckedContinuation { continuation in
             PHImageManager.default().requestImage(
                 for: asset,
                 targetSize: target,
@@ -127,5 +151,7 @@ enum AssetImageLoader {
                 continuation.resume(returning: image)
             }
         }
+        if let image { cache.setObject(image, forKey: key(identifier, target)) }
+        return image
     }
 }
