@@ -57,10 +57,14 @@ targets:
         TARGETED_DEVICE_FAMILY: "1"          # iPhone only — keep review surface small
         CODE_SIGN_STYLE: Automatic
         ENABLE_USER_SCRIPT_SANDBOXING: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon   # Sources/Assets.xcassets
     info:
       path: Generated/Info.plist
       properties:
         CFBundleDisplayName: Blur
+        # Required by App Store (error 90713). We use a custom Info.plist, so the
+        # asset catalog's auto-injected CFBundleIconName doesn't merge — set it here.
+        CFBundleIconName: AppIcon
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}                    # empty dict = system launch screen
