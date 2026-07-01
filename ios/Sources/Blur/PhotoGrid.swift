@@ -38,17 +38,31 @@ struct PhotoGrid: View {
         library.viewMode == .hide ? assetIDs.filter { !library.isHidden($0) } : assetIDs
     }
 
-    /// Units to render — served from cache; computed once per real change.
-    private var displayUnits: [GridUnit] { cachedUnits ?? computeUnits() }
+    /// Units to render — served from cache; while the (off-main) cluster pass is
+    /// still running, fall back to plain singles so the grid paints INSTANTLY on
+    /// open instead of stalling the main thread clustering 79k photos.
+    private var displayUnits: [GridUnit] { cachedUnits ?? visibleAssetIDs.map { .single($0) } }
 
-    private func computeUnits() -> [GridUnit] {
-        // Months / Years: one drill-in tile per calendar bucket (the year-mosaic).
-        if stacked && scale != .all {
-            return Stacker.timeBuckets(ids: visibleAssetIDs, meta: library.assetMeta, scale: scale)
+    /// Recompute grid units OFF the main thread, then swap them in — clustering a
+    /// large library is heavy and must never block open/scroll (the "slow to load"
+    /// and "slow to reload all the decisions" reports).
+    private func recompute() {
+        let ids = visibleAssetIDs
+        let meta = library.assetMeta
+        let stackedFlag = stacked, scaleV = scale
+        let stacksOn = library.stacksEnabled
+        let gap = library.stackGapSeconds, minC = library.stackMinCount
+        Task.detached(priority: .userInitiated) {
+            let units: [GridUnit]
+            if stackedFlag && scaleV != .all {
+                units = Stacker.timeBuckets(ids: ids, meta: meta, scale: scaleV)
+            } else if stackedFlag && stacksOn {
+                units = Stacker.units(ids: ids, meta: meta, gap: gap, minCount: minC)
+            } else {
+                units = ids.map { .single($0) }
+            }
+            await MainActor.run { self.cachedUnits = units }
         }
-        guard stacked && library.stacksEnabled else { return visibleAssetIDs.map { .single($0) } }
-        return Stacker.units(ids: visibleAssetIDs, meta: library.assetMeta,
-                             gap: library.stackGapSeconds, minCount: library.stackMinCount)
     }
 
     /// A cheap fingerprint of everything `computeUnits` depends on — but NOT
@@ -154,8 +168,8 @@ struct PhotoGrid: View {
                           assetIDs: library.assets(onDay: date))
             }
         }
-        .onAppear { if cachedUnits == nil { cachedUnits = computeUnits() } }
-        .onChange(of: unitSignature) { _, _ in cachedUnits = computeUnits() }
+        .onAppear { if cachedUnits == nil { recompute() } }
+        .onChange(of: unitSignature) { _, _ in recompute() }
     }
 
     /// Tap from the fast grid: in Select mode toggle the unit's selection;
