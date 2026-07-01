@@ -46,8 +46,8 @@ struct AssetThumbnail: View {
                 identifier: assetIdentifier,
                 target: CGSize(width: side * displayScale, height: side * displayScale),
                 mode: .aspectFill,
-                highQuality: false,     // grid: cheap + fast (.fastFormat, single-fire)
-                allowsNetwork: true     // load iCloud-optimized photos — but small/fast, not full-res
+                crisp: false,           // grid: cheap resize, small target
+                allowsNetwork: true     // load iCloud-optimized photos
             )
         }
     }
@@ -90,22 +90,23 @@ struct AssetHeroImage: View {
 
 /// One PhotoKit image request, shared by both views above.
 enum AssetImageLoader {
-    /// Both delivery modes below fire the handler EXACTLY ONCE (.fastFormat and
-    /// .highQualityFormat), so the checked continuation can never double-resume.
-    /// (.opportunistic would fire multiple times — never use it here.)
+    /// Always .highQualityFormat: it fires the handler EXACTLY ONCE (so the
+    /// checked continuation can't double-resume) and always returns an image
+    /// (unlike .fastFormat, which yields nil when no fast thumbnail is cached —
+    /// that left tiles blank). Memory safety for the grid comes from a SMALL
+    /// target + `.fast` resize, not from starving the request.
     ///
-    /// Grid tiles pass highQuality:false, allowsNetwork:false — cheap, local,
-    /// and never triggering thousands of iCloud downloads while scrolling a big
-    /// library (the memory blowout that crashed the app). The inspector hero
-    /// passes the defaults for a sharp, iCloud-backed image.
+    /// Grid tiles pass crisp:false (cheap resize); the inspector hero passes the
+    /// default crisp:true (exact). Both keep network on so iCloud-optimized
+    /// photos load, like Photos.
     static func load(identifier: String, target: CGSize, mode: PHImageContentMode,
-                     highQuality: Bool = true, allowsNetwork: Bool = true) async -> UIImage? {
+                     crisp: Bool = true, allowsNetwork: Bool = true) async -> UIImage? {
         let fetch = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
         guard let asset = fetch.firstObject else { return nil }
 
         let options = PHImageRequestOptions()
-        options.deliveryMode = highQuality ? .highQualityFormat : .fastFormat
-        options.resizeMode = highQuality ? .exact : .fast
+        options.deliveryMode = .highQualityFormat   // single-fire, always returns
+        options.resizeMode = crisp ? .exact : .fast
         options.isNetworkAccessAllowed = allowsNetwork
 
         return await withCheckedContinuation { continuation in

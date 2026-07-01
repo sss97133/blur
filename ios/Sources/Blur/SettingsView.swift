@@ -20,6 +20,23 @@ struct SettingsView: View {
                     Text("Let Blur organize for you, powered by AI you bring. Optional — free stays free and anonymous.")
                 }
 
+                if !library.galleries.isEmpty {
+                    Section {
+                        ForEach(library.galleries) { gallery in
+                            Toggle(isOn: Binding(
+                                get: { library.isCategoryBlurred(gallery.id) },
+                                set: { library.setCategoryBlur(gallery.id, $0) }
+                            )) {
+                                Label(gallery.title, systemImage: Self.icon(for: gallery))
+                            }
+                        }
+                    } header: {
+                        Text("Auto-blur by tag")
+                    } footer: {
+                        Text("Photos in a tagged category blur automatically — new ones included. Your manual taps still work on top. Flip Show mode to drop them out entirely when you hand over your phone.")
+                    }
+                }
+
                 Section {
                     LabeledContent("Galleries", value: "\(library.galleries.count)")
                     LabeledContent("Hidden photos", value: "\(library.hiddenAssetIDs.count)")
@@ -46,6 +63,19 @@ struct SettingsView: View {
                     Button("Done") { dismiss() }
                 }
             }
+        }
+    }
+
+    /// A natural SF Symbol for a category row.
+    private static func icon(for gallery: Gallery) -> String {
+        switch gallery.title.lowercased() {
+        case let t where t.contains("screenshot"): return "camera.viewfinder"
+        case let t where t.contains("favorite"): return "heart"
+        case let t where t.contains("selfie") || t.contains("portrait"): return "person.crop.square"
+        case let t where t.contains("burst"): return "square.stack.3d.down.right"
+        case let t where t.contains("panorama"): return "pano"
+        case let t where t.contains("recently"): return "clock"
+        default: return gallery.source == .userAlbum ? "rectangle.stack" : "sparkles"
         }
     }
 }

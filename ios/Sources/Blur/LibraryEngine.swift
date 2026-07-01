@@ -49,15 +49,27 @@ final class LibraryEngine: ObservableObject {
     /// the phone can be handed over safely; off, they render blurred.
     @Published var showMode = false
 
-    /// Asset localIdentifiers the user has marked hidden (blurred). Rendered
-    /// with a heavy blur and hidden entirely in "Show mode".
+    /// Asset localIdentifiers the user has marked hidden (blurred) by hand.
+    /// Rendered with a heavy blur and hidden entirely in "Show mode".
     @Published private(set) var hiddenAssetIDs: Set<String> = []
+
+    /// Photo "tags"/categories chosen to auto-blur — gallery ids (Apple albums +
+    /// smart albums like Screenshots/Favorites/Bursts). Every photo carrying the
+    /// tag blurs, and new matching photos blur automatically on the next scan.
+    /// This is the cold, tag-driven half of the blur engine (no ML).
+    @Published private(set) var blurredCategoryIDs: Set<String> = []
+
+    /// Asset ids blurred BY an active category rule, derived from
+    /// blurredCategoryIDs × the current galleries. Stored as a set so isHidden
+    /// stays O(1) per tile.
+    @Published private(set) var ruleBlurredIDs: Set<String> = []
 
     // ─── Persistence (UserDefaults; required-reason CA92.1) ──────────────────
     private let defaults = UserDefaults.standard
     private enum Key {
         static let hidden = "hiddenAssetIDs"
         static let lastScan = "lastScanDate"
+        static let blurredCategories = "blurredCategoryIDs"
     }
 
     private var changeObserver: LibraryObserver?
@@ -66,6 +78,9 @@ final class LibraryEngine: ObservableObject {
     private init() {
         if let saved = defaults.stringArray(forKey: Key.hidden) {
             hiddenAssetIDs = Set(saved)
+        }
+        if let cats = defaults.stringArray(forKey: Key.blurredCategories) {
+            blurredCategoryIDs = Set(cats)
         }
         lastScanDate = defaults.object(forKey: Key.lastScan) as? Date
     }
@@ -133,6 +148,7 @@ final class LibraryEngine: ObservableObject {
         // Publish on the main actor (we're back on it here).
         allPhotoIDs = result.allPhotoIDs
         galleries = result.galleries
+        recomputeRuleBlurred()   // new photos in a tagged category blur automatically
 
         let photos = result.galleries.reduce(0) { $0 + $1.count }
         lastScan = ScanSummary(galleries: result.galleries.count, userAlbums: result.userAlbums,
@@ -219,7 +235,10 @@ final class LibraryEngine: ObservableObject {
 
     // ─── Hidden (blur/curate) state ──────────────────────────────────────────
 
-    func isHidden(_ assetID: String) -> Bool { hiddenAssetIDs.contains(assetID) }
+    /// A photo is blurred if hidden by hand OR it carries an auto-blur tag.
+    func isHidden(_ assetID: String) -> Bool {
+        hiddenAssetIDs.contains(assetID) || ruleBlurredIDs.contains(assetID)
+    }
 
     func toggleHidden(_ assetID: String) {
         if hiddenAssetIDs.contains(assetID) {
@@ -228,6 +247,31 @@ final class LibraryEngine: ObservableObject {
             hiddenAssetIDs.insert(assetID)
         }
         defaults.set(Array(hiddenAssetIDs), forKey: Key.hidden)
+    }
+
+    // ─── Tag-driven blur (the cold engine) ───────────────────────────────────
+
+    /// Is this category (gallery id) set to auto-blur?
+    func isCategoryBlurred(_ galleryID: String) -> Bool {
+        blurredCategoryIDs.contains(galleryID)
+    }
+
+    /// Toggle auto-blur for a whole category. Every photo in it blurs now, and
+    /// new members blur on the next scan.
+    func setCategoryBlur(_ galleryID: String, _ on: Bool) {
+        if on { blurredCategoryIDs.insert(galleryID) } else { blurredCategoryIDs.remove(galleryID) }
+        defaults.set(Array(blurredCategoryIDs), forKey: Key.blurredCategories)
+        recomputeRuleBlurred()
+    }
+
+    /// Rebuild the rule-blurred asset set from the active category tags × the
+    /// current galleries. Cheap set-union; runs on scan and on every toggle.
+    private func recomputeRuleBlurred() {
+        var ids = Set<String>()
+        for gallery in galleries where blurredCategoryIDs.contains(gallery.id) {
+            ids.formUnion(gallery.assetIDs)
+        }
+        ruleBlurredIDs = ids
     }
 
     // ─── Limited-library access (SDK-max, not worked around) ─────────────────
