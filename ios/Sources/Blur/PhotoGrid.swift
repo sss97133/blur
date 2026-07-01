@@ -26,11 +26,8 @@ struct PhotoGrid: View {
     @State private var selecting = false
     @State private var selection = Set<String>()
 
-    // Pinch-to-zoom columns
+    // Pinch-to-zoom column count (the pinch itself is handled inside FastPhotoGrid)
     @State private var columns = 3
-    @GestureState private var pinch: CGFloat = 1
-    private let minColumns = 1
-    private let maxColumns = 14
     private let spacing: CGFloat = 1.5
 
     /// In Hidden mode, flagged photos drop out of the feed entirely.
@@ -69,33 +66,27 @@ struct PhotoGrid: View {
     private var hasHidden: Bool { assetIDs.contains { library.isHidden($0) } }
 
     var body: some View {
-        GeometryReader { geo in
-            let cell = (geo.size.width - spacing * CGFloat(columns - 1)) / CGFloat(columns)
-            let grid = Array(repeating: GridItem(.fixed(cell), spacing: spacing), count: columns)
-
-            ScrollView {
-                LazyVGrid(columns: grid, spacing: spacing) {
-                    ForEach(displayUnits) { unit in
-                        unitView(unit, side: cell)
-                    }
-                }
-                .scaleEffect(min(max(pinch, 0.55), 1.8), anchor: .center)
+        FastPhotoGrid(
+            units: displayUnits,
+            columns: $columns,
+            spacing: spacing,
+            reveal: library.viewMode == .reveal,
+            isBlurred: { library.isHidden($0) },
+            selecting: selecting,
+            isSelected: { unit in !unit.assetIDs.isEmpty && unit.assetIDs.allSatisfy { selection.contains($0) } },
+            onTap: { handleTap($0) },
+            onBlur: { unit in
+                let anyHidden = unit.assetIDs.contains { library.isHidden($0) }
+                library.setHidden(unit.assetIDs, !anyHidden)
+                Haptics.impact(.light)
+            },
+            onSelectFromMenu: { unit in
+                withAnimation { selecting = true }
+                selection = Set(unit.assetIDs)
+                Haptics.impact()
             }
-            .scrollDisabled(pinch != 1)
-            .simultaneousGesture(
-                MagnifyGesture()
-                    .updating($pinch) { value, state, _ in state = value.magnification }
-                    .onEnded { value in
-                        // Map the whole pinch to a column count so ONE gesture
-                        // spans the full range (spread → fewer/bigger; pinch →
-                        // more/smaller), like Photos — not ±1 per gesture.
-                        let target = Int((Double(columns) / value.magnification).rounded())
-                        withAnimation(.spring(response: 0.30, dampingFraction: 0.85)) {
-                            columns = min(max(target, minColumns), maxColumns)
-                        }
-                    }
-            )
-        }
+        )
+        .ignoresSafeArea(edges: .bottom)
         .navigationTitle(selecting ? "\(selection.count) selected" : title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -150,144 +141,21 @@ struct PhotoGrid: View {
         .onChange(of: unitSignature) { _, _ in cachedUnits = computeUnits() }
     }
 
-    // ── One grid unit (single photo or a stack) ──
-    @ViewBuilder
-    private func unitView(_ unit: GridUnit, side: CGFloat) -> some View {
+    /// Tap from the fast grid: in Select mode toggle the unit's selection;
+    /// otherwise open a photo in the viewer or drill into a stack.
+    private func handleTap(_ unit: GridUnit) {
+        if selecting {
+            let all = !unit.assetIDs.isEmpty && unit.assetIDs.allSatisfy { selection.contains($0) }
+            if all { unit.assetIDs.forEach { selection.remove($0) } }
+            else { selection.formUnion(unit.assetIDs) }
+            Haptics.selection()
+            return
+        }
         switch unit {
-        case .single(let assetID): tile(assetID, side: side)
-        case .stack(let stack):    stackTile(stack, side: side)
-        }
-    }
-
-    // ── A collapsed stack (blast) ──
-    private func stackTile(_ stack: PhotoStack, side: CGFloat) -> some View {
-        let allSelected = selecting && stack.memberIDs.allSatisfy { selection.contains($0) }
-        let anyHidden = stack.memberIDs.contains { library.isHidden($0) }
-        return Button {
-            if selecting {
-                if allSelected { stack.memberIDs.forEach { selection.remove($0) } }
-                else { selection.formUnion(stack.memberIDs) }
-                Haptics.selection()
-            } else {
-                openStack = stack
-            }
-        } label: {
-            AssetThumbnail(
-                assetIdentifier: stack.id,
-                side: side,
-                cornerRadius: 0,
-                blurred: library.viewMode != .reveal && anyHidden
-            )
-            .overlay {
-                // Centered badge that scales with the tile — small tiles get a
-                // small glyph (no count); larger tiles show the count too.
-                let glyph = min(max(side * 0.22, 9), 26)
-                VStack(spacing: 0) {
-                    Image(systemName: "square.stack.3d.up.fill")
-                        .font(.system(size: glyph, weight: .semibold))
-                    if side >= 84 {
-                        Text("\(stack.count)")
-                            .font(.system(size: glyph * 0.66, weight: .semibold))
-                    }
-                }
-                .foregroundStyle(.white)
-                .shadow(color: .black.opacity(0.55), radius: 1.5)
-            }
-            .overlay {
-                if allSelected { Rectangle().stroke(Color.accentColor, lineWidth: 3) }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if selecting {
-                    Image(systemName: allSelected ? "checkmark.circle.fill" : "circle")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, allSelected ? Color.accentColor : Color.black.opacity(0.35))
-                        .font(.title3)
-                        .padding(5)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            Button {
-                library.setHidden(stack.memberIDs, !anyHidden)
-                Haptics.impact(.light)
-            } label: {
-                Label(anyHidden ? "Reveal blast" : "Blur blast",
-                      systemImage: anyHidden ? "eye" : "eye.slash")
-            }
-            Button {
-                withAnimation { selecting = true }
-                selection = Set(stack.memberIDs)
-                Haptics.impact()
-            } label: {
-                Label("Select blast (\(stack.count))", systemImage: "square.stack.3d.up")
-            }
-        }
-    }
-
-    // ── One tile ──
-    private func tile(_ assetID: String, side: CGFloat) -> some View {
-        let isSelected = selection.contains(assetID)
-        return Button {
-            if selecting {
-                if isSelected { selection.remove(assetID) } else { selection.insert(assetID) }
-                Haptics.selection()
-            } else {
-                viewer = ViewerContext(index: visibleAssetIDs.firstIndex(of: assetID) ?? 0)
-            }
-        } label: {
-            AssetThumbnail(
-                assetIdentifier: assetID,
-                side: side,
-                cornerRadius: 0,
-                blurred: library.viewMode != .reveal && library.isHidden(assetID)
-            )
-            .overlay {
-                if selecting && isSelected {
-                    Rectangle().stroke(Color.accentColor, lineWidth: 3)
-                }
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if selecting {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .symbolRenderingMode(.palette)
-                        .foregroundStyle(.white, isSelected ? Color.accentColor : Color.black.opacity(0.35))
-                        .font(.title3)
-                        .padding(5)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .contextMenu {
-            let hidden = library.isHidden(assetID)
-            Button {
-                library.toggleHidden(assetID)
-                Haptics.impact(.light)
-            } label: {
-                Label(hidden ? "Reveal" : "Blur", systemImage: hidden ? "eye" : "eye.slash")
-            }
-            Button {
-                withAnimation { selecting = true }
-                selection = [assetID]
-                Haptics.impact()
-            } label: {
-                Label("Select", systemImage: "checkmark.circle")
-            }
-            // Pivots — drill to related photos (the "right click" find grammar).
-            let subjects = library.subjects(for: assetID)
-            if library.assetMeta[assetID]?.date != nil || !subjects.isEmpty {
-                Divider()
-                if let date = library.assetMeta[assetID]?.date {
-                    Button { pivot = .day(date) } label: {
-                        Label("More from this day", systemImage: "calendar")
-                    }
-                }
-                ForEach(subjects, id: \.self) { subject in
-                    Button { pivot = .subject(subject) } label: {
-                        Label("More: \(subject)", systemImage: "sparkle")
-                    }
-                }
-            }
+        case .single(let assetID):
+            viewer = ViewerContext(index: visibleAssetIDs.firstIndex(of: assetID) ?? 0)
+        case .stack(let stack):
+            openStack = stack
         }
     }
 

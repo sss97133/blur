@@ -33,6 +33,10 @@ enum GridUnit: Identifiable, Hashable {
         case .stack(let stack):    return stack.memberIDs
         }
     }
+
+    var isStack: Bool {
+        if case .stack = self { return true } else { return false }
+    }
 }
 
 enum Stacker {
