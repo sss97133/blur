@@ -46,8 +46,8 @@ struct AssetThumbnail: View {
                 identifier: assetIdentifier,
                 target: CGSize(width: side * displayScale, height: side * displayScale),
                 mode: .aspectFill,
-                highQuality: false,     // grid: cheap + fast
-                allowsNetwork: false    // never pull originals from iCloud per tile
+                highQuality: false,     // grid: cheap + fast (.fastFormat, single-fire)
+                allowsNetwork: true     // load iCloud-optimized photos — but small/fast, not full-res
             )
         }
     }

@@ -73,7 +73,10 @@ struct PhotoGrid: View {
                 .scaleEffect(min(max(pinch, 0.55), 1.8), anchor: .center)
             }
             .scrollDisabled(pinch != 1)   // don't fight the pinch with a scroll
-            .gesture(
+            // simultaneousGesture: a plain .gesture loses to the ScrollView's own
+            // pan recognizer, so the pinch never fired on device. This lets both
+            // recognize, so the two-finger pinch is seen.
+            .simultaneousGesture(
                 MagnifyGesture()
                     .updating($pinch) { value, state, _ in state = value.magnification }
                     .onEnded { value in
