@@ -25,8 +25,13 @@ struct BlurApp: App {
 
     var body: some Scene {
         WindowGroup {
-            GalleriesView()
-                .environmentObject(library)
+            TabView {
+                LibraryView()
+                    .tabItem { Label("Library", systemImage: "photo.on.rectangle") }
+                GalleriesView()
+                    .tabItem { Label("Albums", systemImage: "rectangle.stack") }
+            }
+            .environmentObject(library)
         }
         .onChange(of: scenePhase) { _, phase in
             switch phase {

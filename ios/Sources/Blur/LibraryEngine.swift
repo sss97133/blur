@@ -41,6 +41,14 @@ final class LibraryEngine: ObservableObject {
     /// photos" picker in this case — we never work around the limit, we use it.
     @Published private(set) var accessIsLimited = false
 
+    /// The whole library ("Recents"), newest first — powers the Library tab, so
+    /// Blur opens to your photos exactly like the Photos app.
+    @Published private(set) var allPhotoIDs: [String] = []
+
+    /// Global "Show mode" (premium): when on, hidden photos vanish everywhere so
+    /// the phone can be handed over safely; off, they render blurred.
+    @Published var showMode = false
+
     /// Asset localIdentifiers the user has marked hidden (blurred). Rendered
     /// with a heavy blur and hidden entirely in "Show mode".
     @Published private(set) var hiddenAssetIDs: Set<String> = []
@@ -105,6 +113,9 @@ final class LibraryEngine: ObservableObject {
             defaults.set(lastScanDate, forKey: Key.lastScan)
         }
 
+        // The whole library powers the Library tab (opens on your photos).
+        allPhotoIDs = Self.userLibraryIDs()
+
         let userAlbums = collectGalleries(in: .album, source: .userAlbum)
         let smart = smartGalleries()
 
@@ -144,10 +155,9 @@ final class LibraryEngine: ObservableObject {
 
     /// A curated set of Apple's smart albums — the free "seed" layer.
     private func smartGalleries() -> [Gallery] {
+        // Note: the whole library ("Recents") is NOT here — it's the Library tab
+        // (allPhotoIDs). These are the curated smart albums shown under Albums.
         let subtypes: [PHAssetCollectionSubtype] = [
-            // The whole library ("Recents") — guarantees the app is never empty
-            // for someone who has photos but no albums. Mirrors Photos itself.
-            .smartAlbumUserLibrary,
             .smartAlbumFavorites,
             .smartAlbumSelfPortraits,
             .smartAlbumScreenshots,
@@ -163,6 +173,23 @@ final class LibraryEngine: ObservableObject {
             }
         }
         return out
+    }
+
+    /// The whole photo library ("Recents") as asset ids, newest first — the
+    /// Library tab. Guarantees the app is never empty for someone with photos
+    /// but no albums; mirrors how Photos itself opens.
+    private static func userLibraryIDs() -> [String] {
+        let cols = PHAssetCollection.fetchAssetCollections(
+            with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: nil)
+        guard let lib = cols.firstObject else { return [] }
+        let options = PHFetchOptions()
+        options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let assets = PHAsset.fetchAssets(in: lib, options: options)
+        var ids: [String] = []
+        ids.reserveCapacity(assets.count)
+        assets.enumerateObjects { asset, _, _ in ids.append(asset.localIdentifier) }
+        return ids
     }
 
     /// Materialize one collection into a Gallery (image assets only, newest first).

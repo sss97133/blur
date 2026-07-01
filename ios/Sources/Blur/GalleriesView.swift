@@ -28,7 +28,7 @@ struct GalleriesView: View {
                     grid
                 }
             }
-            .navigationTitle("Blur")
+            .navigationTitle("Albums")
             .toolbar {
                 if library.accessIsLimited {
                     ToolbarItem(placement: .topBarLeading) {
@@ -61,7 +61,7 @@ struct GalleriesView: View {
             LazyVGrid(columns: columns, spacing: 12) {
                 ForEach(library.galleries) { gallery in
                     NavigationLink {
-                        GalleryFocusView(gallery: gallery)
+                        PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
                     } label: {
                         GalleryCard(gallery: gallery)
                     }
@@ -74,9 +74,9 @@ struct GalleriesView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "No galleries yet",
-            systemImage: "photo.on.rectangle.angled",
-            description: Text("Blur organizes the albums already on your phone. Create an album in Photos and pull to refresh.")
+            "No albums yet",
+            systemImage: "rectangle.stack",
+            description: Text("Albums you create in Photos appear here. Your whole library is on the Library tab.")
         )
     }
 

@@ -1,40 +1,36 @@
-// GalleryFocusView.swift — one gallery, the curate + show surface.
+// PhotoGrid.swift — a grid of photos, reused by the Library tab and by albums.
 //
-// This is where "Blur" earns its name. Two modes:
+// The single grid surface in Blur (nuke rule: no parallel display systems). It
+// renders a full-bleed grid of the given assets, tap opens the tag inspector
+// (Photos-like), touch-and-hold hides a photo, and the global Show mode removes
+// hidden photos so the phone can be handed over safely.
 //
-//   • Curate (default): tap a photo to open its details (the tag inspector);
-//     touch and hold to hide it (it blurs). Hiding marks the ones you wouldn't
-//     want to flash past when showing someone.
-//   • Show: a single toggle. Hidden photos disappear entirely, so you can hand
-//     someone your phone and flip through this exact group with confidence —
-//     no frantic scrolling, no accidental reveal.
-//
-// All state is local (LibraryEngine.hiddenAssetIDs). Nothing leaves the device.
+// Designed to live INSIDE a NavigationStack the caller provides (the Library
+// tab wraps it; the Albums tab pushes it) — it never creates its own.
 
 import SwiftUI
 
-struct GalleryFocusView: View {
-    let gallery: Gallery
+struct PhotoGrid: View {
+    let title: String
+    let assetIDs: [String]
     @EnvironmentObject private var library: LibraryEngine
-    @State private var showMode = false
     @State private var inspecting: InspectSelection?
 
-    private let columns = [GridItem(.adaptive(minimum: 110), spacing: 4)]
+    private let columns = [GridItem(.adaptive(minimum: 110), spacing: 2)]
 
-    /// In Show mode, hidden photos are removed from the grid entirely.
+    /// In Show mode, hidden photos are removed entirely.
     private var visibleAssetIDs: [String] {
-        showMode ? gallery.assetIDs.filter { !library.isHidden($0) } : gallery.assetIDs
+        library.showMode ? assetIDs.filter { !library.isHidden($0) } : assetIDs
     }
 
-    /// Whether anything in this gallery is already hidden — drives the
-    /// one-time, self-dismissing hint below.
+    /// Drives the one-time, self-dismissing hint.
     private var hasHidden: Bool {
-        gallery.assetIDs.contains { library.isHidden($0) }
+        assetIDs.contains { library.isHidden($0) }
     }
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, spacing: 4) {
+            LazyVGrid(columns: columns, spacing: 2) {
                 ForEach(visibleAssetIDs, id: \.self) { assetID in
                     Button {
                         inspecting = InspectSelection(id: assetID)
@@ -42,7 +38,7 @@ struct GalleryFocusView: View {
                         AssetThumbnail(
                             assetIdentifier: assetID,
                             side: 110,
-                            cornerRadius: 4,
+                            cornerRadius: 2,
                             blurred: library.isHidden(assetID)
                         )
                     }
@@ -59,21 +55,20 @@ struct GalleryFocusView: View {
                     .accessibilityHint("Opens details. Touch and hold to hide.")
                 }
             }
-            .padding(4)
+            .padding(2)
         }
-        .navigationTitle(gallery.title)
+        .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Toggle(isOn: $showMode) {
-                    Label("Show mode", systemImage: showMode ? "eye" : "eye.slash")
+                Toggle(isOn: $library.showMode) {
+                    Label("Show mode", systemImage: library.showMode ? "eye" : "eye.slash")
                 }
                 .toggleStyle(.button)
             }
         }
         .safeAreaInset(edge: .bottom) {
-            // One-time, self-dismissing: gone the moment the gesture is used.
-            if !showMode && !hasHidden {
+            if !library.showMode && !hasHidden {
                 Text("Tap a photo for its details · touch and hold to hide")
                     .font(.caption)
                     .foregroundStyle(.secondary)
