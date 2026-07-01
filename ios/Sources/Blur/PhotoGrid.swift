@@ -84,7 +84,11 @@ struct PhotoGrid: View {
                 withAnimation { selecting = true }
                 selection = Set(unit.assetIDs)
                 Haptics.impact()
-            }
+            },
+            subjectsFor: { library.subjects(for: $0) },
+            dateFor: { library.assetMeta[$0]?.date },
+            onPivotSubject: { pivot = .subject($0) },
+            onPivotDay: { pivot = .day($0) }
         )
         .ignoresSafeArea(edges: .bottom)
         .navigationTitle(selecting ? "\(selection.count) selected" : title)

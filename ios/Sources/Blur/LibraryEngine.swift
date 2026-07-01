@@ -484,6 +484,16 @@ final class LibraryEngine: ObservableObject {
         allPhotoIDs.filter { visionIndex[$0]?.people.contains(id) ?? false }
     }
 
+    func personName(_ id: Int) -> String? { personReps.first { $0.id == id }?.name }
+
+    /// Name a person — so they can be used in Libraries (Family = these people).
+    func renamePerson(_ id: Int, to name: String) {
+        guard let i = personReps.firstIndex(where: { $0.id == id }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        personReps[i].name = trimmed.isEmpty ? nil : trimmed
+        Self.savePeople(personReps)
+    }
+
     /// How many photos still need a Vision pass.
     var unindexedCount: Int { max(0, allPhotoIDs.count - visionIndex.count) }
 

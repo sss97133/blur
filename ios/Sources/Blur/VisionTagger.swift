@@ -43,6 +43,7 @@ struct Person: Codable, Identifiable {
     let id: Int
     var cover: String             // assetID for the person's cover face
     var vector: [Float]           // representative feature-vector
+    var name: String?             // user-given name (nil = "Person")
 }
 
 /// Euclidean distance between two feature-vectors (same length).

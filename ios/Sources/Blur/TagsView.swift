@@ -13,6 +13,8 @@ import SwiftUI
 
 struct TagsView: View {
     @EnvironmentObject private var library: LibraryEngine
+    @State private var renamingPerson: Int?
+    @State private var personNameField = ""
 
     // Tags is the DERIVED surface — what Vision/PhotoKit read, not your manual
     // albums (those live in the Albums tab). Only Apple's type smart-albums show
@@ -44,7 +46,21 @@ struct TagsView: View {
                 SubjectDetailView(label: ref.label)
             }
             .navigationDestination(for: PersonRef.self) { ref in
-                PhotoGrid(title: "Person", assetIDs: library.assets(forPerson: ref.id))
+                PhotoGrid(title: library.personName(ref.id) ?? "Person",
+                          assetIDs: library.assets(forPerson: ref.id))
+            }
+            .alert("Name Person", isPresented: Binding(
+                get: { renamingPerson != nil },
+                set: { if !$0 { renamingPerson = nil } }
+            )) {
+                TextField("Name", text: $personNameField)
+                Button("Save") {
+                    if let id = renamingPerson { library.renamePerson(id, to: personNameField) }
+                    renamingPerson = nil
+                }
+                Button("Cancel", role: .cancel) { renamingPerson = nil }
+            } message: {
+                Text("Name this person so you can build libraries around them (Family, Team…).")
             }
         }
     }
@@ -75,9 +91,18 @@ struct TagsView: View {
                     NavigationLink(value: PersonRef(id: facet.person.id)) {
                         HStack(spacing: 12) {
                             AssetThumbnail(assetIdentifier: facet.person.cover, side: 36, cornerRadius: 18)
-                            Text("Person")
+                            Text(facet.person.name ?? "Person")
+                                .foregroundStyle(facet.person.name == nil ? .secondary : .primary)
                             Spacer(minLength: 8)
                             Text("\(facet.count)").foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                    .contextMenu {
+                        Button {
+                            personNameField = facet.person.name ?? ""
+                            renamingPerson = facet.person.id
+                        } label: {
+                            Label(facet.person.name == nil ? "Name person" : "Rename", systemImage: "pencil")
                         }
                     }
                 }

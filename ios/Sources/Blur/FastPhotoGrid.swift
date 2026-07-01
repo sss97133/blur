@@ -22,6 +22,11 @@ struct FastPhotoGrid: UIViewRepresentable {
     let onTap: (GridUnit) -> Void
     let onBlur: (GridUnit) -> Void
     let onSelectFromMenu: (GridUnit) -> Void
+    // Drill pivots (the find grammar), for single photos.
+    let subjectsFor: (String) -> [String]
+    let dateFor: (String) -> Date?
+    let onPivotSubject: (String) -> Void
+    let onPivotDay: (Date) -> Void
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -162,10 +167,24 @@ struct FastPhotoGrid: UIViewRepresentable {
         func collectionView(_ cv: UICollectionView, contextMenuConfigurationForItemAt ip: IndexPath,
                             point: CGPoint) -> UIContextMenuConfiguration? {
             let unit = parent.units[ip.item]
+            let id = unit.assetIDs.first ?? ""
             return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
                 let blur = UIAction(title: "Blur", image: UIImage(systemName: "eye.slash")) { _ in self.parent.onBlur(unit) }
                 let select = UIAction(title: "Select", image: UIImage(systemName: "checkmark.circle")) { _ in self.parent.onSelectFromMenu(unit) }
-                return UIMenu(children: [blur, select])
+                var children: [UIMenuElement] = [blur, select]
+                if !unit.isStack {
+                    var pivots: [UIMenuElement] = []
+                    if let date = self.parent.dateFor(id) {
+                        pivots.append(UIAction(title: "More from this day", image: UIImage(systemName: "calendar")) { _ in self.parent.onPivotDay(date) })
+                    }
+                    for subject in self.parent.subjectsFor(id).prefix(6) {
+                        pivots.append(UIAction(title: "More: \(subject)", image: UIImage(systemName: "sparkle")) { _ in self.parent.onPivotSubject(subject) })
+                    }
+                    if !pivots.isEmpty {
+                        children.append(UIMenu(title: "Find related", options: .displayInline, children: pivots))
+                    }
+                }
+                return UIMenu(children: children)
             }
         }
     }

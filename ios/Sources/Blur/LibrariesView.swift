@@ -98,7 +98,7 @@ struct LibraryEditView: View {
                         Toggle(isOn: member(person: facet.person.id)) {
                             HStack(spacing: 10) {
                                 AssetThumbnail(assetIdentifier: facet.person.cover, side: 30, cornerRadius: 15)
-                                Text("Person")
+                                Text(facet.person.name ?? "Person")
                                 Spacer()
                                 Text("\(facet.count)").foregroundStyle(.secondary)
                             }
