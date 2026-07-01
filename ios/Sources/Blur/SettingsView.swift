@@ -26,12 +26,18 @@ struct SettingsView: View {
                 Section {
                     Toggle("Stack blasts", isOn: $library.stacksEnabled)
                     if library.stacksEnabled {
-                        Stepper("At least \(library.stackMinCount) photos", value: $library.stackMinCount, in: 2...20)
-                        Picker("Within", selection: $library.stackGapSeconds) {
-                            Text("3 seconds").tag(3.0)
-                            Text("10 seconds").tag(10.0)
-                            Text("30 seconds").tag(30.0)
-                            Text("1 minute").tag(60.0)
+                        VStack(alignment: .leading) {
+                            Text("At least \(library.stackMinCount) photos")
+                            Slider(value: Binding(
+                                get: { Double(library.stackMinCount) },
+                                set: { library.stackMinCount = Int($0) }
+                            ), in: 2...30, step: 1)
+                        }
+                        VStack(alignment: .leading) {
+                            Text(library.stackGapSeconds < 60
+                                 ? "Within \(Int(library.stackGapSeconds)) seconds"
+                                 : "Within \(Int(library.stackGapSeconds / 60)) min \(Int(library.stackGapSeconds.truncatingRemainder(dividingBy: 60))) sec")
+                            Slider(value: $library.stackGapSeconds, in: 1...300, step: 1)
                         }
                     }
                 } header: {
