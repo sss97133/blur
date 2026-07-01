@@ -29,6 +29,8 @@ struct PhotoTags {
     // ── Capture ──
     var creationDate: Date?
     var location: CLLocation?
+    var placeName: String?      // reverse-geocoded, loaded on demand
+    var fileName: String?       // original resource filename
 
     // ── Image ──
     var pixelWidth = 0
@@ -80,9 +82,14 @@ struct PhotoTags {
         if let creationDate {
             add("Capture", "Taken", Self.dateFormatter.string(from: creationDate))
         }
+        add("Capture", "Place", placeName)
         if let c = location?.coordinate {
-            add("Capture", "Place", String(format: "%.5f, %.5f", c.latitude, c.longitude))
+            add("Capture", "Coordinates", String(format: "%.5f, %.5f", c.latitude, c.longitude))
+            if let alt = location?.altitude, alt != 0 {
+                add("Capture", "Altitude", "\(Int(alt.rounded())) m")
+            }
         }
+        add("Capture", "File", fileName)
 
         // Image
         if pixelWidth > 0 {

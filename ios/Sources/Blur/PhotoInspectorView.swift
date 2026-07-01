@@ -43,14 +43,14 @@ struct PhotoInspectorView: View {
                 }
 
                 Section {
-                    Button(role: library.isHidden(assetID) ? nil : .destructive) {
+                    Button {
                         library.toggleHidden(assetID)
                     } label: {
-                        Label(library.isHidden(assetID) ? "Stop hiding this photo" : "Hide this photo",
+                        Label(library.isHidden(assetID) ? "Blurred — tap to reveal" : "Blur this photo",
                               systemImage: library.isHidden(assetID) ? "eye" : "eye.slash")
                     }
                 } footer: {
-                    Text("Hidden photos blur in Blur and disappear in Show mode. Your library is untouched.")
+                    Text("Blurring is private to Blur and reversible — the photo blurs in the grid and drops out of Show mode so you can hand someone your phone. Nothing is deleted; your Photos library is untouched.")
                 }
             }
             .navigationTitle("Photo")

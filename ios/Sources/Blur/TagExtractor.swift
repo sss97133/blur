@@ -37,6 +37,20 @@ enum TagExtractor {
         return t
     }
 
+    /// Reverse-geocode a coordinate into a short, readable place — the vague
+    /// "37.77493, -122.41942" becomes "Mission District, San Francisco". Fully
+    /// on-device where possible; Apple may hit the network for the name only.
+    private static func placeName(for location: CLLocation) async -> String? {
+        let marks = try? await CLGeocoder().reverseGeocodeLocation(location)
+        guard let p = marks?.first else { return nil }
+        let parts = [p.name, p.locality, p.administrativeArea]
+            .compactMap { $0 }
+        // Drop a leading street-number-only `name` that just repeats detail.
+        var seen = Set<String>()
+        let unique = parts.filter { seen.insert($0).inserted }
+        return unique.isEmpty ? nil : unique.prefix(3).joined(separator: ", ")
+    }
+
     /// Reverse lookup: which user albums contain this asset.
     private static func albumNames(for asset: PHAsset) -> [String] {
         let cols = PHAssetCollection.fetchAssetCollectionsContaining(asset, with: .album, options: nil)
@@ -52,6 +66,10 @@ enum TagExtractor {
     static func fullTags(for asset: PHAsset) async -> PhotoTags {
         var t = fastTags(for: asset)
         t.albumNames = albumNames(for: asset)   // reverse lookup — kept off the instant path
+        t.fileName = PHAssetResource.assetResources(for: asset).first?.originalFilename
+        if let loc = asset.location {
+            t.placeName = await placeName(for: loc)   // raw coords are vague; show a name
+        }
         guard let props = await imageProperties(for: asset) else { return t }
 
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]

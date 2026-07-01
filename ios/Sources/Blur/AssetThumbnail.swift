@@ -36,7 +36,9 @@ struct AssetThumbnail: View {
         .animation(.default, value: blurred)
         // Decorative — the enclosing card/button carries the accessible label.
         .accessibilityHidden(true)
-        .task(id: assetIdentifier) {
+        // Reload when the identifier OR the tile size changes: pinch-zooming the
+        // grid resizes tiles, and we want crisp pixels at the new size, like Photos.
+        .task(id: "\(assetIdentifier)#\(Int(side.rounded()))") {
             image = await Self.loadThumbnail(for: assetIdentifier, side: side, scale: displayScale)
         }
     }
