@@ -181,6 +181,7 @@ struct FastPhotoGrid: UIViewRepresentable {
             let id = unit.assetIDs.first ?? ""
             cell.setBlurred(!parent.reveal && parent.isBlurred(id))
             cell.setStack(unit.isStack ? unit.assetIDs.count : nil, side: side())
+            if case .stack(let s) = unit { cell.setCaption(s.label) } else { cell.setCaption(nil) }
             cell.setSelection(parent.selecting, selected: parent.isSelected(unit))
         }
 
@@ -263,6 +264,7 @@ final class PhotoCell: UICollectionViewCell {
     private let blur = UIVisualEffectView(effect: UIBlurEffect(style: .systemThickMaterial))
     private let badge = UIImageView(image: UIImage(systemName: "square.stack.3d.up.fill"))
     private let check = UIImageView()
+    private let caption = UILabel()
     private var requestID: PHImageRequestID?
     private weak var manager: PHImageManager?
     private var loadedID = ""
@@ -286,6 +288,14 @@ final class PhotoCell: UICollectionViewCell {
         check.tintColor = .white
         check.isHidden = true
         contentView.addSubview(check)
+        caption.textColor = .white
+        caption.font = .systemFont(ofSize: 13, weight: .semibold)
+        caption.isHidden = true
+        caption.layer.shadowColor = UIColor.black.cgColor
+        caption.layer.shadowOpacity = 0.7
+        caption.layer.shadowRadius = 2
+        caption.layer.shadowOffset = .zero
+        contentView.addSubview(caption)
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -297,6 +307,7 @@ final class PhotoCell: UICollectionViewCell {
         badge.frame = CGRect(x: (bounds.width - s) / 2, y: (bounds.height - s) / 2, width: s, height: s)
         let cs: CGFloat = 22
         check.frame = CGRect(x: bounds.width - cs - 4, y: bounds.height - cs - 4, width: cs, height: cs)
+        caption.frame = CGRect(x: 6, y: bounds.height - 24, width: bounds.width - 12, height: 18)
     }
 
     func load(assetID: String, asset: PHAsset?, targetPx: CGFloat, manager: PHImageManager) {
@@ -323,6 +334,14 @@ final class PhotoCell: UICollectionViewCell {
         badge.isHidden = (count == nil)
     }
 
+    /// A time-bucket caption ("March 2024") drawn bottom-left; nil for burst
+    /// stacks and singles. Hides the center stack icon when captioned.
+    func setCaption(_ text: String?) {
+        caption.text = text
+        caption.isHidden = (text == nil)
+        if text != nil { badge.isHidden = true }   // date reads better than the icon
+    }
+
     func setSelection(_ selecting: Bool, selected: Bool) {
         check.isHidden = !selecting
         check.image = UIImage(systemName: selected ? "checkmark.circle.fill" : "circle")
@@ -335,5 +354,7 @@ final class PhotoCell: UICollectionViewCell {
         if let requestID { manager?.cancelImageRequest(requestID) }
         imageView.image = nil
         loadedID = ""
+        caption.isHidden = true
+        badge.isHidden = true
     }
 }

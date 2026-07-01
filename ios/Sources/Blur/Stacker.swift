@@ -11,7 +11,24 @@ import Foundation
 struct PhotoStack: Identifiable, Hashable {
     let id: String            // representative (cover) asset id — the run's first
     let memberIDs: [String]
+    /// A human label when this stack is a TIME bucket (e.g. "March 2024") rather
+    /// than a burst — drives the tile caption and the drill-in title. nil = burst.
+    var label: String? = nil
     var count: Int { memberIDs.count }
+}
+
+/// How far the grid collapses time. All = every photo (bursts still stack);
+/// Months / Years = one drill-in tile per calendar bucket (the year-mosaic —
+/// so you jump to when instead of scrolling 500 screens).
+enum TimeScale: String, CaseIterable, Hashable {
+    case all, month, year
+    var label: String {
+        switch self {
+        case .all:   return "All"
+        case .month: return "Months"
+        case .year:  return "Years"
+        }
+    }
 }
 
 /// One thing the grid renders: a lone photo, or a collapsed stack.
@@ -68,6 +85,36 @@ enum Stacker {
             }
         }
         flush()
+        return units
+    }
+
+    /// Collapse a newest-first id list into one drill-in tile per calendar bucket
+    /// (month or year). The list is already newest-first, so buckets emerge in
+    /// order. Undated photos fall into a trailing "Undated" bucket rather than
+    /// silently disappearing.
+    static func timeBuckets(ids: [String], meta: [String: AssetMeta], scale: TimeScale) -> [GridUnit] {
+        guard scale != .all else { return ids.map { .single($0) } }
+        let cal = Calendar.current
+        var order: [Date] = []
+        var byKey: [Date: [String]] = [:]
+        var undated: [String] = []
+        for id in ids {
+            guard let d = meta[id]?.date else { undated.append(id); continue }
+            let comps = scale == .year ? cal.dateComponents([.year], from: d)
+                                       : cal.dateComponents([.year, .month], from: d)
+            let key = cal.date(from: comps) ?? d
+            if byKey[key] == nil { byKey[key] = []; order.append(key) }
+            byKey[key]?.append(id)
+        }
+        let fmt = DateFormatter()
+        fmt.dateFormat = scale == .year ? "yyyy" : "MMMM yyyy"
+        var units: [GridUnit] = order.compactMap { key in
+            guard let members = byKey[key], let cover = members.first else { return nil }
+            return .stack(PhotoStack(id: cover, memberIDs: members, label: fmt.string(from: key)))
+        }
+        if let cover = undated.first {
+            units.append(.stack(PhotoStack(id: cover, memberIDs: undated, label: "Undated")))
+        }
         return units
     }
 

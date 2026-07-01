@@ -28,6 +28,9 @@ struct PhotoGrid: View {
 
     // Pinch-to-zoom column count (the pinch itself is handled inside FastPhotoGrid)
     @State private var columns = 3
+    /// Temporal collapse level — All (every photo) / Months / Years. The
+    /// year-mosaic: jump to WHEN instead of scrolling the whole archive.
+    @State private var scale: TimeScale = .all
     private let spacing: CGFloat = 1.5
 
     /// In Hidden mode, flagged photos drop out of the feed entirely.
@@ -39,6 +42,10 @@ struct PhotoGrid: View {
     private var displayUnits: [GridUnit] { cachedUnits ?? computeUnits() }
 
     private func computeUnits() -> [GridUnit] {
+        // Months / Years: one drill-in tile per calendar bucket (the year-mosaic).
+        if stacked && scale != .all {
+            return Stacker.timeBuckets(ids: visibleAssetIDs, meta: library.assetMeta, scale: scale)
+        }
         guard stacked && library.stacksEnabled else { return visibleAssetIDs.map { .single($0) } }
         return Stacker.units(ids: visibleAssetIDs, meta: library.assetMeta,
                              gap: library.stackGapSeconds, minCount: library.stackMinCount)
@@ -52,6 +59,7 @@ struct PhotoGrid: View {
         h.combine(assetIDs.first)   // catch same-count-different-content (search results)
         h.combine(assetIDs.last)
         h.combine(stacked)
+        h.combine(scale)
         h.combine(library.viewMode)
         h.combine(library.stacksEnabled)
         h.combine(library.stackGapSeconds)
@@ -115,6 +123,8 @@ struct PhotoGrid: View {
         .safeAreaInset(edge: .bottom) {
             if selecting {
                 selectionBar
+            } else if stacked {
+                scaleBar
             } else if library.viewMode != .hide && !hasHidden {
                 Text("Tap a photo for details · touch and hold for actions · Select to blur many")
                     .font(.caption)
@@ -130,7 +140,10 @@ struct PhotoGrid: View {
             PhotoViewer(assetIDs: visibleAssetIDs, index: context.index)
         }
         .navigationDestination(item: $openStack) { stack in
-            PhotoGrid(title: "\(stack.count) photos", assetIDs: stack.memberIDs, stacked: false)
+            // A time bucket ("March 2024") drills into that month WITH bursts still
+            // collapsing; a burst stack drills in EXPANDED (every frame).
+            PhotoGrid(title: stack.label ?? "\(stack.count) photos",
+                      assetIDs: stack.memberIDs, stacked: stack.label != nil)
         }
         .navigationDestination(item: $pivot) { pivot in
             switch pivot {
@@ -161,6 +174,18 @@ struct PhotoGrid: View {
         case .stack(let stack):
             openStack = stack
         }
+    }
+
+    // ── Temporal scale switch (All · Months · Years) — the year-mosaic ──
+    private var scaleBar: some View {
+        Picker("Scale", selection: $scale) {
+            ForEach(TimeScale.allCases, id: \.self) { Text($0.label).tag($0) }
+        }
+        .pickerStyle(.segmented)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity)
+        .background(.ultraThinMaterial)
     }
 
     // ── Batch action bar (Select mode) ──
