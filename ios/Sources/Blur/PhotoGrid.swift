@@ -30,7 +30,7 @@ struct PhotoGrid: View {
     @State private var columns = 3
     @GestureState private var pinch: CGFloat = 1
     private let minColumns = 1
-    private let maxColumns = 10
+    private let maxColumns = 14
     private let spacing: CGFloat = 1.5
 
     /// In Hidden mode, flagged photos drop out of the feed entirely.
@@ -178,16 +178,20 @@ struct PhotoGrid: View {
                 cornerRadius: 0,
                 blurred: library.viewMode != .reveal && anyHidden
             )
-            .overlay(alignment: .topTrailing) {
-                HStack(spacing: 3) {
+            .overlay {
+                // Centered badge that scales with the tile — small tiles get a
+                // small glyph (no count); larger tiles show the count too.
+                let glyph = min(max(side * 0.22, 9), 26)
+                VStack(spacing: 0) {
                     Image(systemName: "square.stack.3d.up.fill")
-                    Text("\(stack.count)")
+                        .font(.system(size: glyph, weight: .semibold))
+                    if side >= 84 {
+                        Text("\(stack.count)")
+                            .font(.system(size: glyph * 0.66, weight: .semibold))
+                    }
                 }
-                .font(.caption2.weight(.semibold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 6).padding(.vertical, 3)
-                .background(.black.opacity(0.5), in: Capsule())
-                .padding(5)
+                .shadow(color: .black.opacity(0.55), radius: 1.5)
             }
             .overlay {
                 if allSelected { Rectangle().stroke(Color.accentColor, lineWidth: 3) }
