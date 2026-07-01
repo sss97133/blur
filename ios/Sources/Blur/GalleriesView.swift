@@ -58,7 +58,6 @@ struct GalleriesView: View {
             .sheet(isPresented: $showSettings) {
                 SettingsView()
             }
-            .refreshable { await library.rescan() }
         }
     }
 

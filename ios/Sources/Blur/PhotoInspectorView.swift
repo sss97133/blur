@@ -28,6 +28,46 @@ struct PhotoInspectorView: View {
 
     private var isHidden: Bool { library.isHidden(assetID) }
 
+    struct Actionable: Identifiable {
+        let id = UUID()
+        let icon: String
+        let text: String
+        let url: URL
+    }
+
+    /// Pull actionable entities (phone, address, link) out of OCR'd text —
+    /// the evidence made useful (tap-to-call the rental number).
+    static func actionables(_ lines: [String]) -> [Actionable] {
+        let joined = lines.joined(separator: "\n")
+        guard !joined.isEmpty else { return [] }
+        let types = NSTextCheckingResult.CheckingType.phoneNumber.rawValue
+            | NSTextCheckingResult.CheckingType.link.rawValue
+            | NSTextCheckingResult.CheckingType.address.rawValue
+        guard let detector = try? NSDataDetector(types: types) else { return [] }
+
+        let ns = joined as NSString
+        var out: [Actionable] = []
+        detector.enumerateMatches(in: joined, range: NSRange(location: 0, length: ns.length)) { match, _, _ in
+            guard let match else { return }
+            let str = ns.substring(with: match.range)
+            switch match.resultType {
+            case .phoneNumber:
+                if let url = URL(string: "tel://" + str.filter { $0.isNumber || $0 == "+" }) {
+                    out.append(.init(icon: "phone.fill", text: str, url: url))
+                }
+            case .link:
+                if let url = match.url { out.append(.init(icon: "link", text: str, url: url)) }
+            case .address:
+                if let enc = str.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+                   let url = URL(string: "http://maps.apple.com/?q=" + enc) {
+                    out.append(.init(icon: "mappin.and.ellipse", text: str, url: url))
+                }
+            default: break
+            }
+        }
+        return out
+    }
+
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
@@ -96,6 +136,17 @@ struct PhotoInspectorView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
+                }
+                // Actionable entities pulled from the text — the number to CALL,
+                // the address to MAP. This is the evidence made useful.
+                let actions = Self.actionables(vision.text)
+                if !actions.isEmpty {
+                    ForEach(actions) { action in
+                        Link(destination: action.url) {
+                            Label(action.text, systemImage: action.icon)
+                                .font(.caption.weight(.medium))
+                        }
+                    }
                 }
             } else {
                 HStack(spacing: 8) {

@@ -61,7 +61,8 @@ struct LibraryView: View {
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }
-            .refreshable { await library.rescan() }
+            // No pull-to-refresh: the library change observer already rescans on
+            // real changes, and the refresh gesture fought drag-to-dismiss.
         }
     }
 

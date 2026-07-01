@@ -39,9 +39,8 @@ struct TagsView: View {
                 PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
             }
             .navigationDestination(for: SubjectRef.self) { ref in
-                PhotoGrid(title: ref.label, assetIDs: library.assets(forSubject: ref.label))
+                SubjectDetailView(label: ref.label)
             }
-            .refreshable { await library.rescan() }
         }
     }
 

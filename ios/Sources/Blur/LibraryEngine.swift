@@ -421,6 +421,23 @@ final class LibraryEngine: ObservableObject {
     /// The subjects Vision found for one photo — the pivots offered on it.
     func subjects(for assetID: String) -> [String] { visionIndex[assetID]?.subjects ?? [] }
 
+    /// A subject's "closest associates" — the subjects that most often appear in
+    /// the same photos. ("Vehicle" → Wheel, Road, Trailer.) Drives the drill-down.
+    func associates(for label: String, limit: Int = 10) -> [(label: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for vision in visionIndex.values where vision.subjects.contains(label) {
+            for other in Set(vision.subjects) where other != label {
+                counts[other, default: 0] += 1
+            }
+        }
+        return counts.sorted { $0.value > $1.value }.prefix(limit).map { ($0.key, $0.value) }
+    }
+
+    /// How many photos carry this subject.
+    func count(forSubject label: String) -> Int {
+        visionIndex.values.reduce(0) { $0 + ($1.subjects.contains(label) ? 1 : 0) }
+    }
+
     func isSubjectBlurred(_ label: String) -> Bool { blurredSubjects.contains(label) }
 
     /// "Blur anything automotive" — flip a subject; every photo Vision tagged
