@@ -72,10 +72,11 @@ struct PhotoInspectorView: View {
                 }
             }
             if let vision {
-                if vision.subjects.isEmpty {
-                    Text(vision.faceCount > 0 ? "Faces detected." : "No subjects detected.")
+                if vision.subjects.isEmpty && vision.text.isEmpty {
+                    Text(vision.faceCount > 0 ? "Faces detected." : "Nothing detected.")
                         .font(.caption).foregroundStyle(.secondary)
-                } else {
+                }
+                if !vision.subjects.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack(spacing: 6) {
                             ForEach(vision.subjects) { tag in
@@ -89,6 +90,12 @@ struct PhotoInspectorView: View {
                             }
                         }
                     }
+                }
+                if !vision.text.isEmpty {
+                    Label(vision.text.prefix(8).joined(separator: " · "), systemImage: "text.viewfinder")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
                 }
             } else {
                 HStack(spacing: 8) {

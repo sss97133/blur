@@ -54,7 +54,7 @@ struct LibraryView: View {
                 }
             }
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
-                        prompt: "Find a photo — try “trailer”")
+                        prompt: "Search your photos")
             .searchSuggestions {
                 ForEach(suggestions, id: \.self) { subject in
                     Label(subject, systemImage: "sparkle").searchCompletion(subject)

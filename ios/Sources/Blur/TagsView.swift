@@ -81,16 +81,16 @@ struct TagsView: View {
                 Button {
                     Task { await library.indexLibrary() }
                 } label: {
-                    Label(library.subjectIndex.isEmpty
-                          ? "Find subjects in \(library.allPhotoIDs.count) photos"
-                          : "Analyze \(library.unindexedCount) more",
+                    Label(library.visionIndex.isEmpty
+                          ? "Read \(library.allPhotoIDs.count) photos"
+                          : "Read \(library.unindexedCount) more",
                           systemImage: "sparkles")
                 }
             }
         } header: {
             Text("Subjects · Vision")
         } footer: {
-            Text("Vision reads what's in each photo — on device, nothing leaves your phone. Blur a subject (like Vehicle) to blur every photo of it, new ones included.")
+            Text("Vision reads each photo on device — what's in it AND the text on it (signs, numbers, receipts). Search finds both. Blur a subject to blur every photo of it.")
         }
     }
 

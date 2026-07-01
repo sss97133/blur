@@ -82,10 +82,10 @@ final class LibraryEngine: ObservableObject {
     /// stays O(1) per tile.
     @Published private(set) var ruleBlurredIDs: Set<String> = []
 
-    // ── Vision subjects (Layer 2 — computed by us, cached on device) ──
-    /// assetID → the subject labels Vision read for it. Persisted to a JSON file
-    /// (too big for UserDefaults on a real library).
-    @Published private(set) var subjectIndex: [String: [String]] = [:]
+    // ── Vision index (Layer 2 — computed by us, cached on device) ──
+    /// assetID → {subjects, OCR text} Vision read for it. Persisted to a JSON
+    /// file (too big for UserDefaults on a real library).
+    @Published private(set) var visionIndex: [String: PhotoVision] = [:]
     @Published private(set) var indexing = false
     @Published private(set) var indexedCount = 0
     /// Subject labels chosen to auto-blur ("Vehicle" → blur every car). This is
@@ -115,8 +115,8 @@ final class LibraryEngine: ObservableObject {
         if let subs = defaults.stringArray(forKey: Key.blurredSubjects) {
             blurredSubjects = Set(subs)
         }
-        subjectIndex = Self.loadSubjectIndex()
-        indexedCount = subjectIndex.count
+        visionIndex = Self.loadVisionIndex()
+        indexedCount = visionIndex.count
         lastScanDate = defaults.object(forKey: Key.lastScan) as? Date
         recomputeSubjectBlurred()
     }
@@ -341,42 +341,43 @@ final class LibraryEngine: ObservableObject {
     func indexLibrary() async {
         guard !indexing else { return }
         indexing = true
-        var work = subjectIndex
+        var work = visionIndex
         var processed = 0
         for id in allPhotoIDs where work[id] == nil {
             if Task.isCancelled { break }
             let vt = await VisionTagger.tags(for: id)
-            work[id] = Array(vt.subjects.prefix(5).map { $0.label })
+            work[id] = PhotoVision(subjects: Array(vt.subjects.prefix(5).map { $0.label }),
+                                   text: vt.text)
             processed += 1
             if processed % 40 == 0 {                 // batch UI updates + checkpoints
-                subjectIndex = work
+                visionIndex = work
                 indexedCount = work.count
                 recomputeSubjectBlurred()
-                Self.saveSubjectIndex(work)
+                Self.saveVisionIndex(work)
             }
         }
-        subjectIndex = work
+        visionIndex = work
         indexedCount = work.count
         recomputeSubjectBlurred()
-        Self.saveSubjectIndex(work)
+        Self.saveVisionIndex(work)
         indexing = false
     }
 
     /// How many photos still need a Vision pass.
-    var unindexedCount: Int { max(0, allPhotoIDs.count - subjectIndex.count) }
+    var unindexedCount: Int { max(0, allPhotoIDs.count - visionIndex.count) }
 
     /// Subject facets — label + how many photos carry it, most common first.
     var subjectFacets: [(label: String, count: Int)] {
         var counts: [String: Int] = [:]
-        for labels in subjectIndex.values {
-            for label in Set(labels) { counts[label, default: 0] += 1 }
+        for vision in visionIndex.values {
+            for label in Set(vision.subjects) { counts[label, default: 0] += 1 }
         }
         return counts.sorted { $0.value > $1.value }.prefix(50).map { ($0.key, $0.value) }
     }
 
     /// The photos Vision tagged with a subject, newest first.
     func assets(forSubject label: String) -> [String] {
-        allPhotoIDs.filter { (subjectIndex[$0] ?? []).contains(label) }
+        allPhotoIDs.filter { (visionIndex[$0]?.subjects ?? []).contains(label) }
     }
 
     // ─── Find (the whole point: locate a photo at breakneck speed) ───────────
@@ -391,9 +392,13 @@ final class LibraryEngine: ObservableObject {
         var perTerm: [Set<String>] = []
         for term in terms {
             var matches = Set<String>()
-            for (assetID, labels) in subjectIndex
-            where labels.contains(where: { $0.lowercased().contains(term) }) {
-                matches.insert(assetID)
+            for (assetID, vision) in visionIndex {
+                // Match a depicted subject OR text ON the photo (the actionable
+                // evidence — a number, a name, a sign, a receipt).
+                if vision.subjects.contains(where: { $0.lowercased().contains(term) })
+                    || vision.text.contains(where: { $0.lowercased().contains(term) }) {
+                    matches.insert(assetID)
+                }
             }
             for gallery in galleries where gallery.title.lowercased().contains(term) {
                 matches.formUnion(gallery.assetIDs)
@@ -414,7 +419,7 @@ final class LibraryEngine: ObservableObject {
     }
 
     /// The subjects Vision found for one photo — the pivots offered on it.
-    func subjects(for assetID: String) -> [String] { subjectIndex[assetID] ?? [] }
+    func subjects(for assetID: String) -> [String] { visionIndex[assetID]?.subjects ?? [] }
 
     func isSubjectBlurred(_ label: String) -> Bool { blurredSubjects.contains(label) }
 
@@ -429,7 +434,7 @@ final class LibraryEngine: ObservableObject {
     private func recomputeSubjectBlurred() {
         guard !blurredSubjects.isEmpty else { subjectBlurredIDs = []; return }
         var ids = Set<String>()
-        for (assetID, labels) in subjectIndex where !Set(labels).isDisjoint(with: blurredSubjects) {
+        for (assetID, vision) in visionIndex where !Set(vision.subjects).isDisjoint(with: blurredSubjects) {
             ids.insert(assetID)
         }
         subjectBlurredIDs = ids
@@ -440,13 +445,13 @@ final class LibraryEngine: ObservableObject {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         return dir.appendingPathComponent("subject-index.json")
     }
-    nonisolated static func loadSubjectIndex() -> [String: [String]] {
+    nonisolated static func loadVisionIndex() -> [String: PhotoVision] {
         guard let data = try? Data(contentsOf: indexURL),
-              let dict = try? JSONDecoder().decode([String: [String]].self, from: data)
+              let dict = try? JSONDecoder().decode([String: PhotoVision].self, from: data)
         else { return [:] }
         return dict
     }
-    nonisolated static func saveSubjectIndex(_ index: [String: [String]]) {
+    nonisolated static func saveVisionIndex(_ index: [String: PhotoVision]) {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(index) {
