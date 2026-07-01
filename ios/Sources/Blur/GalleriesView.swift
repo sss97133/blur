@@ -75,6 +75,17 @@ struct GalleriesView: View {
                             GalleryCard(gallery: gallery, side: tile)
                         }
                         .buttonStyle(.plain)
+                        // The "right click": hold an album for its actions. Blur
+                        // is a toggle here — one of its many access points.
+                        .contextMenu {
+                            let on = library.isCategoryBlurred(gallery.id)
+                            Button {
+                                library.setCategoryBlur(gallery.id, !on)
+                            } label: {
+                                Label(on ? "Unblur album" : "Blur album",
+                                      systemImage: on ? "eye" : "eye.slash")
+                            }
+                        }
                     }
                 }
                 .padding(spacing)
