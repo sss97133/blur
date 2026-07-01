@@ -6,7 +6,7 @@
     <key>method</key>
     <string>app-store-connect</string>
     <key>destination</key>
-    <string>export</string>
+    <string>upload</string>
     <key>teamID</key>
     <string>JZ28MFU3VB</string>
     <!-- Let xcodebuild create/download the distribution cert + profile via the
