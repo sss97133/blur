@@ -8,6 +8,21 @@ import UIKit
 struct LibraryView: View {
     @EnvironmentObject private var library: LibraryEngine
     @State private var showSettings = false
+    @State private var searchText = ""
+
+    /// Search filters the grid; empty = the whole library.
+    private var results: [String] {
+        searchText.isEmpty ? library.allPhotoIDs : library.search(searchText)
+    }
+
+    /// Subject autocompletions matching what's typed.
+    private var suggestions: [String] {
+        guard !searchText.isEmpty else { return [] }
+        let q = searchText.lowercased()
+        return library.subjectFacets
+            .filter { $0.label.lowercased().contains(q) }
+            .prefix(6).map(\.label)
+    }
 
     var body: some View {
         NavigationStack {
@@ -24,8 +39,10 @@ struct LibraryView: View {
                     } else {
                         ProgressView().controlSize(.large)
                     }
+                } else if !searchText.isEmpty && results.isEmpty {
+                    ContentUnavailableView.search(text: searchText)
                 } else {
-                    PhotoGrid(title: "Library", assetIDs: library.allPhotoIDs)
+                    PhotoGrid(title: searchText.isEmpty ? "Library" : "Results", assetIDs: results)
                 }
             }
             .toolbar {
@@ -34,6 +51,13 @@ struct LibraryView: View {
                         Image(systemName: "gearshape")
                     }
                     .accessibilityLabel("Settings")
+                }
+            }
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always),
+                        prompt: "Find a photo — try “trailer”")
+            .searchSuggestions {
+                ForEach(suggestions, id: \.self) { subject in
+                    Label(subject, systemImage: "sparkle").searchCompletion(subject)
                 }
             }
             .sheet(isPresented: $showSettings) { SettingsView() }

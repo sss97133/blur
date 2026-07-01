@@ -379,6 +379,43 @@ final class LibraryEngine: ObservableObject {
         allPhotoIDs.filter { (subjectIndex[$0] ?? []).contains(label) }
     }
 
+    // ─── Find (the whole point: locate a photo at breakneck speed) ───────────
+
+    /// Search across Vision subjects + tag/album titles. Multiple words AND
+    /// together (intersection) — "beach trailer" finds photos of both. Results
+    /// come back in library order (newest first).
+    func search(_ query: String) -> [String] {
+        let terms = query.lowercased().split(separator: " ").map(String.init).filter { !$0.isEmpty }
+        guard !terms.isEmpty else { return allPhotoIDs }
+
+        var perTerm: [Set<String>] = []
+        for term in terms {
+            var matches = Set<String>()
+            for (assetID, labels) in subjectIndex
+            where labels.contains(where: { $0.lowercased().contains(term) }) {
+                matches.insert(assetID)
+            }
+            for gallery in galleries where gallery.title.lowercased().contains(term) {
+                matches.formUnion(gallery.assetIDs)
+            }
+            perTerm.append(matches)
+        }
+        guard var acc = perTerm.first else { return [] }
+        for set in perTerm.dropFirst() { acc.formIntersection(set) }
+        return allPhotoIDs.filter { acc.contains($0) }
+    }
+
+    /// Pivot: every photo from the same calendar day (drill from one photo).
+    func assets(onDay date: Date) -> [String] {
+        let cal = Calendar.current
+        return allPhotoIDs.filter {
+            (assetMeta[$0]?.date).map { cal.isDate($0, inSameDayAs: date) } ?? false
+        }
+    }
+
+    /// The subjects Vision found for one photo — the pivots offered on it.
+    func subjects(for assetID: String) -> [String] { subjectIndex[assetID] ?? [] }
+
     func isSubjectBlurred(_ label: String) -> Bool { blurredSubjects.contains(label) }
 
     /// "Blur anything automotive" — flip a subject; every photo Vision tagged

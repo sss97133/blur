@@ -16,6 +16,7 @@ struct PhotoGrid: View {
     @EnvironmentObject private var library: LibraryEngine
     @State private var inspecting: InspectSelection?
     @State private var openStack: PhotoStack?
+    @State private var pivot: Pivot?
     /// Cached grid units — recomputed only when the library/settings change (see
     /// unitSignature), NOT on every render. Clustering the whole library on each
     /// pinch frame would freeze a large library.
@@ -51,6 +52,8 @@ struct PhotoGrid: View {
     private var unitSignature: Int {
         var h = Hasher()
         h.combine(assetIDs.count)
+        h.combine(assetIDs.first)   // catch same-count-different-content (search results)
+        h.combine(assetIDs.last)
         h.combine(stacked)
         h.combine(library.viewMode)
         h.combine(library.stacksEnabled)
@@ -131,6 +134,15 @@ struct PhotoGrid: View {
         }
         .navigationDestination(item: $openStack) { stack in
             PhotoGrid(title: "\(stack.count) photos", assetIDs: stack.memberIDs, stacked: false)
+        }
+        .navigationDestination(item: $pivot) { pivot in
+            switch pivot {
+            case .subject(let label):
+                PhotoGrid(title: label, assetIDs: library.assets(forSubject: label))
+            case .day(let date):
+                PhotoGrid(title: date.formatted(date: .abbreviated, time: .omitted),
+                          assetIDs: library.assets(onDay: date))
+            }
         }
         .onAppear { if cachedUnits == nil { cachedUnits = computeUnits() } }
         .onChange(of: unitSignature) { _, _ in cachedUnits = computeUnits() }
@@ -255,6 +267,21 @@ struct PhotoGrid: View {
             } label: {
                 Label("Select", systemImage: "checkmark.circle")
             }
+            // Pivots — drill to related photos (the "right click" find grammar).
+            let subjects = library.subjects(for: assetID)
+            if library.assetMeta[assetID]?.date != nil || !subjects.isEmpty {
+                Divider()
+                if let date = library.assetMeta[assetID]?.date {
+                    Button { pivot = .day(date) } label: {
+                        Label("More from this day", systemImage: "calendar")
+                    }
+                }
+                ForEach(subjects, id: \.self) { subject in
+                    Button { pivot = .subject(subject) } label: {
+                        Label("More: \(subject)", systemImage: "sparkle")
+                    }
+                }
+            }
         }
     }
 
@@ -296,4 +323,16 @@ struct PhotoGrid: View {
 /// Identifiable wrapper so `.sheet(item:)` can present the inspector.
 private struct InspectSelection: Identifiable {
     let id: String
+}
+
+/// A drill-down pivot from one photo to a related set — the find grammar.
+enum Pivot: Hashable, Identifiable {
+    case subject(String)
+    case day(Date)
+    var id: String {
+        switch self {
+        case .subject(let label): return "subject:\(label)"
+        case .day(let date):      return "day:\(date.timeIntervalSince1970)"
+        }
+    }
 }
