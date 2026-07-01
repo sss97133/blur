@@ -45,9 +45,10 @@ final class LibraryEngine: ObservableObject {
     /// Blur opens to your photos exactly like the Photos app.
     @Published private(set) var allPhotoIDs: [String] = []
 
-    /// Global "Show mode" (premium): when on, hidden photos vanish everywhere so
-    /// the phone can be handed over safely; off, they render blurred.
-    @Published var showMode = false
+    /// The three-state view lens (the eye, top-right): Reveal shows everything
+    /// crisp (curation), Blur softens flagged photos, Hidden drops them from the
+    /// feed entirely (the safe hand-over).
+    @Published var viewMode: ViewMode = .blur
 
     /// Asset localIdentifiers the user has marked hidden (blurred) by hand.
     /// Rendered with a heavy blur and hidden entirely in "Show mode".
@@ -64,12 +65,24 @@ final class LibraryEngine: ObservableObject {
     /// stays O(1) per tile.
     @Published private(set) var ruleBlurredIDs: Set<String> = []
 
+    // ── Vision subjects (Layer 2 — computed by us, cached on device) ──
+    /// assetID → the subject labels Vision read for it. Persisted to a JSON file
+    /// (too big for UserDefaults on a real library).
+    @Published private(set) var subjectIndex: [String: [String]] = [:]
+    @Published private(set) var indexing = false
+    @Published private(set) var indexedCount = 0
+    /// Subject labels chosen to auto-blur ("Vehicle" → blur every car). This is
+    /// "blur anything automotive," on-device.
+    @Published private(set) var blurredSubjects: Set<String> = []
+    @Published private(set) var subjectBlurredIDs: Set<String> = []
+
     // ─── Persistence (UserDefaults; required-reason CA92.1) ──────────────────
     private let defaults = UserDefaults.standard
     private enum Key {
         static let hidden = "hiddenAssetIDs"
         static let lastScan = "lastScanDate"
         static let blurredCategories = "blurredCategoryIDs"
+        static let blurredSubjects = "blurredSubjects"
     }
 
     private var changeObserver: LibraryObserver?
@@ -82,7 +95,13 @@ final class LibraryEngine: ObservableObject {
         if let cats = defaults.stringArray(forKey: Key.blurredCategories) {
             blurredCategoryIDs = Set(cats)
         }
+        if let subs = defaults.stringArray(forKey: Key.blurredSubjects) {
+            blurredSubjects = Set(subs)
+        }
+        subjectIndex = Self.loadSubjectIndex()
+        indexedCount = subjectIndex.count
         lastScanDate = defaults.object(forKey: Key.lastScan) as? Date
+        recomputeSubjectBlurred()
     }
 
     // ─── Lifecycle ───────────────────────────────────────────────────────────
@@ -235,9 +254,12 @@ final class LibraryEngine: ObservableObject {
 
     // ─── Hidden (blur/curate) state ──────────────────────────────────────────
 
-    /// A photo is blurred if hidden by hand OR it carries an auto-blur tag.
+    /// A photo is blurred if hidden by hand, OR it carries an auto-blur tag
+    /// (category), OR it carries an auto-blur subject (Vision).
     func isHidden(_ assetID: String) -> Bool {
-        hiddenAssetIDs.contains(assetID) || ruleBlurredIDs.contains(assetID)
+        hiddenAssetIDs.contains(assetID)
+            || ruleBlurredIDs.contains(assetID)
+            || subjectBlurredIDs.contains(assetID)
     }
 
     func toggleHidden(_ assetID: String) {
@@ -246,6 +268,12 @@ final class LibraryEngine: ObservableObject {
         } else {
             hiddenAssetIDs.insert(assetID)
         }
+        defaults.set(Array(hiddenAssetIDs), forKey: Key.hidden)
+    }
+
+    /// Batch curation — the Select tool and grab-the-blast blur/reveal many at once.
+    func setHidden(_ ids: some Sequence<String>, _ hidden: Bool) {
+        if hidden { hiddenAssetIDs.formUnion(ids) } else { hiddenAssetIDs.subtract(ids) }
         defaults.set(Array(hiddenAssetIDs), forKey: Key.hidden)
     }
 
@@ -274,6 +302,89 @@ final class LibraryEngine: ObservableObject {
         ruleBlurredIDs = ids
     }
 
+    // ─── Vision subjects (Layer 2) ───────────────────────────────────────────
+
+    /// Run Vision over the whole library, caching subject labels per photo.
+    /// Skips already-indexed photos, so it's resumable and only pays once.
+    func indexLibrary() async {
+        guard !indexing else { return }
+        indexing = true
+        var work = subjectIndex
+        var processed = 0
+        for id in allPhotoIDs where work[id] == nil {
+            if Task.isCancelled { break }
+            let vt = await VisionTagger.tags(for: id)
+            work[id] = Array(vt.subjects.prefix(5).map { $0.label })
+            processed += 1
+            if processed % 40 == 0 {                 // batch UI updates + checkpoints
+                subjectIndex = work
+                indexedCount = work.count
+                recomputeSubjectBlurred()
+                Self.saveSubjectIndex(work)
+            }
+        }
+        subjectIndex = work
+        indexedCount = work.count
+        recomputeSubjectBlurred()
+        Self.saveSubjectIndex(work)
+        indexing = false
+    }
+
+    /// How many photos still need a Vision pass.
+    var unindexedCount: Int { max(0, allPhotoIDs.count - subjectIndex.count) }
+
+    /// Subject facets — label + how many photos carry it, most common first.
+    var subjectFacets: [(label: String, count: Int)] {
+        var counts: [String: Int] = [:]
+        for labels in subjectIndex.values {
+            for label in Set(labels) { counts[label, default: 0] += 1 }
+        }
+        return counts.sorted { $0.value > $1.value }.prefix(50).map { ($0.key, $0.value) }
+    }
+
+    /// The photos Vision tagged with a subject, newest first.
+    func assets(forSubject label: String) -> [String] {
+        allPhotoIDs.filter { (subjectIndex[$0] ?? []).contains(label) }
+    }
+
+    func isSubjectBlurred(_ label: String) -> Bool { blurredSubjects.contains(label) }
+
+    /// "Blur anything automotive" — flip a subject; every photo Vision tagged
+    /// with it blurs, and new photos blur as they're indexed.
+    func setSubjectBlur(_ label: String, _ on: Bool) {
+        if on { blurredSubjects.insert(label) } else { blurredSubjects.remove(label) }
+        defaults.set(Array(blurredSubjects), forKey: Key.blurredSubjects)
+        recomputeSubjectBlurred()
+    }
+
+    private func recomputeSubjectBlurred() {
+        guard !blurredSubjects.isEmpty else { subjectBlurredIDs = []; return }
+        var ids = Set<String>()
+        for (assetID, labels) in subjectIndex where !Set(labels).isDisjoint(with: blurredSubjects) {
+            ids.insert(assetID)
+        }
+        subjectBlurredIDs = ids
+    }
+
+    // ── Subject-index persistence (JSON file in Application Support) ──
+    nonisolated private static var indexURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return dir.appendingPathComponent("subject-index.json")
+    }
+    nonisolated static func loadSubjectIndex() -> [String: [String]] {
+        guard let data = try? Data(contentsOf: indexURL),
+              let dict = try? JSONDecoder().decode([String: [String]].self, from: data)
+        else { return [:] }
+        return dict
+    }
+    nonisolated static func saveSubjectIndex(_ index: [String: [String]]) {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(index) {
+            try? data.write(to: indexURL, options: .atomic)
+        }
+    }
+
     // ─── Limited-library access (SDK-max, not worked around) ─────────────────
 
     /// Present Apple's own "select more photos" sheet. The change observer
@@ -293,6 +404,27 @@ final class LibraryEngine: ObservableObject {
         var top = scene?.keyWindow?.rootViewController
         while let presented = top?.presentedViewController { top = presented }
         return top
+    }
+}
+
+/// The eye's three states. Reveal = edit/curate (see everything); Blur = flagged
+/// photos softened; Hidden = flagged photos removed from the feed.
+enum ViewMode: String, CaseIterable {
+    case reveal, blur, hide
+
+    var label: String {
+        switch self {
+        case .reveal: return "Reveal"
+        case .blur:   return "Blurred"
+        case .hide:   return "Hidden"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .reveal: return "eye"
+        case .blur:   return "eye.slash"
+        case .hide:   return "eye.slash.circle.fill"
+        }
     }
 }
 

@@ -23,7 +23,7 @@ struct TagsView: View {
                 if library.authorizationDenied {
                     ContentUnavailableView("Photos access is off", systemImage: "lock",
                         description: Text("Enable Photos for Blur in Settings to see your tags."))
-                } else if library.galleries.isEmpty {
+                } else if library.galleries.isEmpty && library.allPhotoIDs.isEmpty {
                     if library.didCompleteInitialScan {
                         ContentUnavailableView("No tags yet", systemImage: "tag",
                             description: Text("Types and albums from your library appear here."))
@@ -37,6 +37,9 @@ struct TagsView: View {
             .navigationTitle("Tags")
             .navigationDestination(for: Gallery.self) { gallery in
                 PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
+            }
+            .navigationDestination(for: SubjectRef.self) { ref in
+                PhotoGrid(title: ref.label, assetIDs: library.assets(forSubject: ref.label))
             }
             .refreshable { await library.rescan() }
         }
@@ -56,6 +59,64 @@ struct TagsView: View {
             if !albumTags.isEmpty {
                 Section("Albums") { ForEach(albumTags) { tagRow($0) } }
             }
+            subjectsSection
+        }
+    }
+
+    // ── Subjects (Vision, Layer 2) ──
+    @ViewBuilder
+    private var subjectsSection: some View {
+        Section {
+            if library.indexing {
+                HStack(spacing: 10) {
+                    ProgressView()
+                    Text("Analyzing on device… \(library.indexedCount)/\(library.allPhotoIDs.count)")
+                        .font(.subheadline).foregroundStyle(.secondary)
+                }
+            }
+            ForEach(library.subjectFacets, id: \.label) { facet in
+                subjectRow(facet.label, count: facet.count)
+            }
+            if !library.indexing && library.unindexedCount > 0 {
+                Button {
+                    Task { await library.indexLibrary() }
+                } label: {
+                    Label(library.subjectIndex.isEmpty
+                          ? "Find subjects in \(library.allPhotoIDs.count) photos"
+                          : "Analyze \(library.unindexedCount) more",
+                          systemImage: "sparkles")
+                }
+            }
+        } header: {
+            Text("Subjects · Vision")
+        } footer: {
+            Text("Vision reads what's in each photo — on device, nothing leaves your phone. Blur a subject (like Vehicle) to blur every photo of it, new ones included.")
+        }
+    }
+
+    private func subjectRow(_ label: String, count: Int) -> some View {
+        let blurred = library.isSubjectBlurred(label)
+        return NavigationLink(value: SubjectRef(label: label)) {
+            HStack(spacing: 10) {
+                Label(label, systemImage: "sparkle")
+                Spacer(minLength: 8)
+                if blurred {
+                    Image(systemName: "eye.slash.fill").font(.caption).foregroundStyle(.indigo)
+                }
+                Text("\(count)").foregroundStyle(.secondary).monospacedDigit()
+            }
+        }
+        .contextMenu {
+            Button { library.setSubjectBlur(label, !blurred) } label: {
+                Label(blurred ? "Unblur these" : "Blur these",
+                      systemImage: blurred ? "eye" : "eye.slash")
+            }
+        }
+        .swipeActions(edge: .trailing) {
+            Button { library.setSubjectBlur(label, !blurred) } label: {
+                Label(blurred ? "Unblur" : "Blur", systemImage: blurred ? "eye" : "eye.slash")
+            }
+            .tint(.indigo)
         }
     }
 
@@ -101,4 +162,9 @@ struct TagsView: View {
         default: return gallery.source == .userAlbum ? "rectangle.stack" : "tag"
         }
     }
+}
+
+/// Navigation value for a Vision subject group.
+struct SubjectRef: Hashable {
+    let label: String
 }
