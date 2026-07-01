@@ -19,12 +19,18 @@ struct GalleriesView: View {
     private let maxColumns = 5
     private let spacing: CGFloat = 12
 
+    // Only real albums here — smart-album "types" live in the Tags tab now.
+    // Yours and iCloud-shared are kept in separate sections so someone else's
+    // oversharing never sits front-and-center with your own record-keeping.
+    private var myAlbums: [Gallery] { library.galleries.filter { $0.source == .userAlbum } }
+    private var sharedAlbums: [Gallery] { library.galleries.filter { $0.source == .sharedAlbum } }
+
     var body: some View {
         NavigationStack {
             Group {
                 if library.authorizationDenied {
                     permissionPrompt
-                } else if library.galleries.isEmpty {
+                } else if myAlbums.isEmpty && sharedAlbums.isEmpty {
                     if library.didCompleteInitialScan {
                         emptyState
                     } else {
@@ -66,25 +72,16 @@ struct GalleriesView: View {
             let tile = (geo.size.width - spacing * CGFloat(columns + 1)) / CGFloat(columns)
             let cols = Array(repeating: GridItem(.fixed(tile), spacing: spacing), count: columns)
             ScrollView {
-                LazyVGrid(columns: cols, spacing: spacing) {
-                    ForEach(library.galleries) { gallery in
-                        NavigationLink {
-                            PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
-                        } label: {
-                            GalleryCard(gallery: gallery, side: tile)
-                        }
-                        .buttonStyle(.plain)
-                        // The "right click": hold an album for its actions. Blur
-                        // is a toggle here — one of its many access points.
-                        .contextMenu {
-                            let on = library.isCategoryBlurred(gallery.id)
-                            Button {
-                                library.setCategoryBlur(gallery.id, !on)
-                            } label: {
-                                Label(on ? "Unblur album" : "Blur album",
-                                      systemImage: on ? "eye" : "eye.slash")
-                            }
-                        }
+                LazyVGrid(columns: cols, spacing: spacing, pinnedViews: [.sectionHeaders]) {
+                    if !myAlbums.isEmpty {
+                        Section {
+                            ForEach(myAlbums) { albumCard($0, side: tile) }
+                        } header: { sectionHeader("My Albums") }
+                    }
+                    if !sharedAlbums.isEmpty {
+                        Section {
+                            ForEach(sharedAlbums) { albumCard($0, side: tile) }
+                        } header: { sectionHeader("Shared with you") }
                     }
                 }
                 .padding(spacing)
@@ -103,6 +100,34 @@ struct GalleriesView: View {
                     }
             )
         }
+    }
+
+    private func albumCard(_ gallery: Gallery, side: CGFloat) -> some View {
+        NavigationLink {
+            PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
+        } label: {
+            GalleryCard(gallery: gallery, side: side)
+        }
+        .buttonStyle(.plain)
+        // The "right click": hold an album for its actions.
+        .contextMenu {
+            let on = library.isCategoryBlurred(gallery.id)
+            Button {
+                library.setCategoryBlur(gallery.id, !on)
+            } label: {
+                Label(on ? "Unblur album" : "Blur album", systemImage: on ? "eye" : "eye.slash")
+            }
+        }
+    }
+
+    private func sectionHeader(_ title: String) -> some View {
+        HStack {
+            Text(title).font(.headline)
+            Spacer()
+        }
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity)
+        .background(.regularMaterial)
     }
 
     private var emptyState: some View {

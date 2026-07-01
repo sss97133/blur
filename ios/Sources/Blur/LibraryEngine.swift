@@ -236,12 +236,15 @@ final class LibraryEngine: ObservableObject {
         return true
     }
 
-    /// User-created albums. `nonisolated` so the scan runs off the main thread.
+    /// User albums, split into "yours" vs iCloud-shared (someone else's
+    /// oversharing). `nonisolated` so the scan runs off the main thread.
     nonisolated private static func collectGalleries(in type: PHAssetCollectionType, source: GallerySource) -> [Gallery] {
         let collections = PHAssetCollection.fetchAssetCollections(with: type, subtype: .any, options: nil)
         var out: [Gallery] = []
         collections.enumerateObjects { collection, _, _ in
-            if let gallery = Self.gallery(from: collection, source: source) { out.append(gallery) }
+            let src: GallerySource = collection.assetCollectionSubtype == .albumCloudShared
+                ? .sharedAlbum : source
+            if let gallery = Self.gallery(from: collection, source: src) { out.append(gallery) }
         }
         return out
     }

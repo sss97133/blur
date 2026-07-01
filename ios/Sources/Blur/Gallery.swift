@@ -10,6 +10,7 @@ import Foundation
 
 enum GallerySource: String, Codable {
     case userAlbum      // a collection the user created in Photos
+    case sharedAlbum    // an iCloud shared album (often someone else's oversharing)
     case smartAlbum     // one of Apple's on-device smart albums
     case clustered      // (paid) discovered by Blur's passive clustering
     case manual         // created by the user inside Blur
