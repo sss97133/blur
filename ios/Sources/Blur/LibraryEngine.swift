@@ -181,11 +181,17 @@ final class LibraryEngine: ObservableObject {
                               userAlbums: userAlbums.count, smartAlbums: smart.count)
         }.value
 
-        // Publish on the main actor (we're back on it here).
-        allPhotoIDs = result.allPhotoIDs
-        assetMeta = result.assetMeta
-        galleries = result.galleries
-        recomputeRuleBlurred()   // new photos in a tagged category blur automatically
+        // Publish on the main actor (we're back on it here). Only reassign when
+        // something actually CHANGED — otherwise a pull-to-refresh over an
+        // unchanged large library would force SwiftUI to re-diff tens of
+        // thousands of tiles and rebuild the whole grid on the main thread
+        // (the freeze). Equality checks are O(n) but far cheaper than that.
+        if allPhotoIDs != result.allPhotoIDs { allPhotoIDs = result.allPhotoIDs }
+        if assetMeta.count != result.assetMeta.count { assetMeta = result.assetMeta }
+        if galleries != result.galleries {
+            galleries = result.galleries
+            recomputeRuleBlurred()   // new photos in a tagged category blur automatically
+        }
 
         let photos = result.galleries.reduce(0) { $0 + $1.count }
         lastScan = ScanSummary(galleries: result.galleries.count, userAlbums: result.userAlbums,

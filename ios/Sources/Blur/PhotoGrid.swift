@@ -16,6 +16,10 @@ struct PhotoGrid: View {
     @EnvironmentObject private var library: LibraryEngine
     @State private var inspecting: InspectSelection?
     @State private var openStack: PhotoStack?
+    /// Cached grid units — recomputed only when the library/settings change (see
+    /// unitSignature), NOT on every render. Clustering the whole library on each
+    /// pinch frame would freeze a large library.
+    @State private var cachedUnits: [GridUnit]?
 
     // Select mode
     @State private var selecting = false
@@ -33,11 +37,30 @@ struct PhotoGrid: View {
         library.viewMode == .hide ? assetIDs.filter { !library.isHidden($0) } : assetIDs
     }
 
-    /// The grid's rendered units — blasts collapsed into stacks when enabled.
-    private var units: [GridUnit] {
+    /// Units to render — served from cache; computed once per real change.
+    private var displayUnits: [GridUnit] { cachedUnits ?? computeUnits() }
+
+    private func computeUnits() -> [GridUnit] {
         guard stacked && library.stacksEnabled else { return visibleAssetIDs.map { .single($0) } }
         return Stacker.units(ids: visibleAssetIDs, meta: library.assetMeta,
                              gap: library.stackGapSeconds, minCount: library.stackMinCount)
+    }
+
+    /// A cheap fingerprint of everything `computeUnits` depends on — but NOT
+    /// pinch/scroll/selection, so those don't trigger a recompute.
+    private var unitSignature: Int {
+        var h = Hasher()
+        h.combine(assetIDs.count)
+        h.combine(stacked)
+        h.combine(library.viewMode)
+        h.combine(library.stacksEnabled)
+        h.combine(library.stackGapSeconds)
+        h.combine(library.stackMinCount)
+        h.combine(library.assetMeta.count)
+        h.combine(library.hiddenAssetIDs.count)
+        h.combine(library.ruleBlurredIDs.count)
+        h.combine(library.subjectBlurredIDs.count)
+        return h.finalize()
     }
 
     private var hasHidden: Bool { assetIDs.contains { library.isHidden($0) } }
@@ -49,7 +72,7 @@ struct PhotoGrid: View {
 
             ScrollView {
                 LazyVGrid(columns: grid, spacing: spacing) {
-                    ForEach(units) { unit in
+                    ForEach(displayUnits) { unit in
                         unitView(unit, side: cell)
                     }
                 }
@@ -109,6 +132,8 @@ struct PhotoGrid: View {
         .navigationDestination(item: $openStack) { stack in
             PhotoGrid(title: "\(stack.count) photos", assetIDs: stack.memberIDs, stacked: false)
         }
+        .onAppear { if cachedUnits == nil { cachedUnits = computeUnits() } }
+        .onChange(of: unitSignature) { _, _ in cachedUnits = computeUnits() }
     }
 
     // ── One grid unit (single photo or a stack) ──
