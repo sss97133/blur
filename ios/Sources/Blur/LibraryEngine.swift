@@ -172,6 +172,17 @@ final class LibraryEngine: ObservableObject {
         PHPhotoLibrary.shared().register(observer)
         changeObserver = observer
 
+        // Instant open: show the last-known photo list immediately, then refresh
+        // with a fresh scan in the background. Beats waiting on a 79k-photo
+        // enumeration every launch.
+        if allPhotoIDs.isEmpty {
+            let cached = Self.loadPhotoIDs()
+            if !cached.isEmpty {
+                allPhotoIDs = cached
+                didCompleteInitialScan = true
+            }
+        }
+
         await rescan()
     }
 
@@ -215,7 +226,10 @@ final class LibraryEngine: ObservableObject {
         // unchanged large library would force SwiftUI to re-diff tens of
         // thousands of tiles and rebuild the whole grid on the main thread
         // (the freeze). Equality checks are O(n) but far cheaper than that.
-        if allPhotoIDs != result.allPhotoIDs { allPhotoIDs = result.allPhotoIDs }
+        if allPhotoIDs != result.allPhotoIDs {
+            allPhotoIDs = result.allPhotoIDs
+            Self.savePhotoIDs(result.allPhotoIDs)   // for instant open next time
+        }
         if assetMeta.count != result.assetMeta.count { assetMeta = result.assetMeta }
         if galleries != result.galleries {
             galleries = result.galleries
@@ -642,6 +656,23 @@ final class LibraryEngine: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(people) {
             try? data.write(to: peopleURL, options: .atomic)
+        }
+    }
+
+    nonisolated private static var photoIDsURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("photo-ids.json")
+    }
+    nonisolated static func loadPhotoIDs() -> [String] {
+        guard let data = try? Data(contentsOf: photoIDsURL),
+              let ids = try? JSONDecoder().decode([String].self, from: data) else { return [] }
+        return ids
+    }
+    nonisolated static func savePhotoIDs(_ ids: [String]) {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(ids) {
+            try? data.write(to: photoIDsURL, options: .atomic)
         }
     }
 
