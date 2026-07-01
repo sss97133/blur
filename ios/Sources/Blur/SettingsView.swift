@@ -24,6 +24,23 @@ struct SettingsView: View {
                 // tag to browse it, swipe/long-press to blur the whole group).
 
                 Section {
+                    Toggle("Stack blasts", isOn: $library.stacksEnabled)
+                    if library.stacksEnabled {
+                        Stepper("At least \(library.stackMinCount) photos", value: $library.stackMinCount, in: 2...20)
+                        Picker("Within", selection: $library.stackGapSeconds) {
+                            Text("3 seconds").tag(3.0)
+                            Text("10 seconds").tag(10.0)
+                            Text("30 seconds").tag(30.0)
+                            Text("1 minute").tag(60.0)
+                        }
+                    }
+                } header: {
+                    Text("Stacks")
+                } footer: {
+                    Text("Collapse blasts of similar shots (bursts + rapid runs) into one tile. Tap a stack to open it; touch and hold to blur or select the whole blast.")
+                }
+
+                Section {
                     LabeledContent("Galleries", value: "\(library.galleries.count)")
                     LabeledContent("Hidden photos", value: "\(library.hiddenAssetIDs.count)")
                     if let scan = library.lastScan {

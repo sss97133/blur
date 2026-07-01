@@ -10,8 +10,12 @@ import SwiftUI
 struct PhotoGrid: View {
     let title: String
     let assetIDs: [String]
+    /// Whether blasts collapse into stacks here. The stack sub-grid passes false
+    /// so a stack's members show expanded.
+    var stacked: Bool = true
     @EnvironmentObject private var library: LibraryEngine
     @State private var inspecting: InspectSelection?
+    @State private var openStack: PhotoStack?
 
     // Select mode
     @State private var selecting = false
@@ -29,6 +33,13 @@ struct PhotoGrid: View {
         library.viewMode == .hide ? assetIDs.filter { !library.isHidden($0) } : assetIDs
     }
 
+    /// The grid's rendered units — blasts collapsed into stacks when enabled.
+    private var units: [GridUnit] {
+        guard stacked && library.stacksEnabled else { return visibleAssetIDs.map { .single($0) } }
+        return Stacker.units(ids: visibleAssetIDs, meta: library.assetMeta,
+                             gap: library.stackGapSeconds, minCount: library.stackMinCount)
+    }
+
     private var hasHidden: Bool { assetIDs.contains { library.isHidden($0) } }
 
     var body: some View {
@@ -38,8 +49,8 @@ struct PhotoGrid: View {
 
             ScrollView {
                 LazyVGrid(columns: grid, spacing: spacing) {
-                    ForEach(visibleAssetIDs, id: \.self) { assetID in
-                        tile(assetID, side: cell)
+                    ForEach(units) { unit in
+                        unitView(unit, side: cell)
                     }
                 }
                 .scaleEffect(min(max(pinch, 0.55), 1.8), anchor: .center)
@@ -94,6 +105,80 @@ struct PhotoGrid: View {
         }
         .sheet(item: $inspecting) { selection in
             PhotoInspectorView(assetID: selection.id)
+        }
+        .navigationDestination(item: $openStack) { stack in
+            PhotoGrid(title: "\(stack.count) photos", assetIDs: stack.memberIDs, stacked: false)
+        }
+    }
+
+    // ── One grid unit (single photo or a stack) ──
+    @ViewBuilder
+    private func unitView(_ unit: GridUnit, side: CGFloat) -> some View {
+        switch unit {
+        case .single(let assetID): tile(assetID, side: side)
+        case .stack(let stack):    stackTile(stack, side: side)
+        }
+    }
+
+    // ── A collapsed stack (blast) ──
+    private func stackTile(_ stack: PhotoStack, side: CGFloat) -> some View {
+        let allSelected = selecting && stack.memberIDs.allSatisfy { selection.contains($0) }
+        let anyHidden = stack.memberIDs.contains { library.isHidden($0) }
+        return Button {
+            if selecting {
+                if allSelected { stack.memberIDs.forEach { selection.remove($0) } }
+                else { selection.formUnion(stack.memberIDs) }
+                Haptics.selection()
+            } else {
+                openStack = stack
+            }
+        } label: {
+            AssetThumbnail(
+                assetIdentifier: stack.id,
+                side: side,
+                cornerRadius: 0,
+                blurred: library.viewMode != .reveal && anyHidden
+            )
+            .overlay(alignment: .topTrailing) {
+                HStack(spacing: 3) {
+                    Image(systemName: "square.stack.3d.up.fill")
+                    Text("\(stack.count)")
+                }
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 6).padding(.vertical, 3)
+                .background(.black.opacity(0.5), in: Capsule())
+                .padding(5)
+            }
+            .overlay {
+                if allSelected { Rectangle().stroke(Color.accentColor, lineWidth: 3) }
+            }
+            .overlay(alignment: .bottomTrailing) {
+                if selecting {
+                    Image(systemName: allSelected ? "checkmark.circle.fill" : "circle")
+                        .symbolRenderingMode(.palette)
+                        .foregroundStyle(.white, allSelected ? Color.accentColor : Color.black.opacity(0.35))
+                        .font(.title3)
+                        .padding(5)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .contextMenu {
+            Button {
+                library.setHidden(stack.memberIDs, !anyHidden)
+                Haptics.impact(.light)
+            } label: {
+                Label(anyHidden ? "Reveal blast" : "Blur blast",
+                      systemImage: anyHidden ? "eye" : "eye.slash")
+            }
+            Button {
+                withAnimation { selecting = true }
+                selection = Set(stack.memberIDs)
+                Haptics.impact()
+            } label: {
+                Label("Select blast (\(stack.count))", systemImage: "square.stack.3d.up")
+            }
         }
     }
 

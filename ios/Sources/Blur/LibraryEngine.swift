@@ -45,6 +45,23 @@ final class LibraryEngine: ObservableObject {
     /// Blur opens to your photos exactly like the Photos app.
     @Published private(set) var allPhotoIDs: [String] = []
 
+    /// Per-asset date + burst id, captured during the scan — lets the grid
+    /// cluster "blasts" into stacks without re-fetching PhotoKit.
+    @Published private(set) var assetMeta: [String: AssetMeta] = [:]
+
+    // ── Stacks (collapse blasts) — customizable metrics ──
+    @Published var stacksEnabled: Bool = UserDefaults.standard.object(forKey: "stacksEnabled") as? Bool ?? true {
+        didSet { defaults.set(stacksEnabled, forKey: "stacksEnabled") }
+    }
+    /// Photos within this many seconds of each other (and same day) count as one blast.
+    @Published var stackGapSeconds: Double = UserDefaults.standard.object(forKey: "stackGap") as? Double ?? 10 {
+        didSet { defaults.set(stackGapSeconds, forKey: "stackGap") }
+    }
+    /// A run must reach this size to collapse into a stack.
+    @Published var stackMinCount: Int = UserDefaults.standard.object(forKey: "stackMin") as? Int ?? 4 {
+        didSet { defaults.set(stackMinCount, forKey: "stackMin") }
+    }
+
     /// The three-state view lens (the eye, top-right): Reveal shows everything
     /// crisp (curation), Blur softens flagged photos, Hidden drops them from the
     /// feed entirely (the safe hand-over).
@@ -151,7 +168,7 @@ final class LibraryEngine: ObservableObject {
         // is heavy. Do it OFF the main thread — a synchronous scan on the main
         // actor blocks long enough that iOS's watchdog kills the app on launch.
         let result = await Task.detached(priority: .userInitiated) { () -> ScanResult in
-            let ids = Self.userLibraryIDs()
+            let lib = Self.userLibrary()
             let userAlbums = Self.collectGalleries(in: .album, source: .userAlbum)
             let smart = Self.smartGalleries()
             let built = (userAlbums + smart)
@@ -160,12 +177,13 @@ final class LibraryEngine: ObservableObject {
                     if lhs.source != rhs.source { return lhs.source == .userAlbum }
                     return lhs.count > rhs.count
                 }
-            return ScanResult(allPhotoIDs: ids, galleries: built,
+            return ScanResult(allPhotoIDs: lib.ids, assetMeta: lib.meta, galleries: built,
                               userAlbums: userAlbums.count, smartAlbums: smart.count)
         }.value
 
         // Publish on the main actor (we're back on it here).
         allPhotoIDs = result.allPhotoIDs
+        assetMeta = result.assetMeta
         galleries = result.galleries
         recomputeRuleBlurred()   // new photos in a tagged category blur automatically
 
@@ -216,18 +234,26 @@ final class LibraryEngine: ObservableObject {
     /// The whole photo library ("Recents") as asset ids, newest first — the
     /// Library tab. Guarantees the app is never empty for someone with photos
     /// but no albums; mirrors how Photos itself opens.
-    nonisolated private static func userLibraryIDs() -> [String] {
+    nonisolated private static func userLibrary() -> (ids: [String], meta: [String: AssetMeta]) {
         let cols = PHAssetCollection.fetchAssetCollections(
             with: .smartAlbum, subtype: .smartAlbumUserLibrary, options: nil)
-        guard let lib = cols.firstObject else { return [] }
+        guard let lib = cols.firstObject else { return ([], [:]) }
         let options = PHFetchOptions()
         options.predicate = NSPredicate(format: "mediaType == %d", PHAssetMediaType.image.rawValue)
         options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
         let assets = PHAsset.fetchAssets(in: lib, options: options)
         var ids: [String] = []
+        var meta: [String: AssetMeta] = [:]
         ids.reserveCapacity(assets.count)
-        assets.enumerateObjects { asset, _, _ in ids.append(asset.localIdentifier) }
-        return ids
+        meta.reserveCapacity(assets.count)
+        assets.enumerateObjects { asset, _, _ in
+            ids.append(asset.localIdentifier)
+            // Cheap properties — captured here so the grid can cluster "blasts"
+            // (bursts + rapid runs) into stacks without re-fetching.
+            meta[asset.localIdentifier] = AssetMeta(date: asset.creationDate,
+                                                    burstID: asset.burstIdentifier)
+        }
+        return (ids, meta)
     }
 
     /// Materialize one collection into a Gallery (image assets only, newest first).
@@ -428,9 +454,16 @@ enum ViewMode: String, CaseIterable {
     }
 }
 
+/// Cheap per-asset facts captured at scan time, for stacking.
+struct AssetMeta {
+    let date: Date?
+    let burstID: String?
+}
+
 /// The scan's product, carried back from the background task to the main actor.
 struct ScanResult {
     let allPhotoIDs: [String]
+    let assetMeta: [String: AssetMeta]
     let galleries: [Gallery]
     let userAlbums: Int
     let smartAlbums: Int
