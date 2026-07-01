@@ -41,6 +41,17 @@ struct SettingsView: View {
                 }
 
                 Section {
+                    VStack(alignment: .leading) {
+                        Text("Face matching: \(Int(library.faceThreshold))")
+                        Slider(value: $library.faceThreshold, in: 5...40, step: 1)
+                    }
+                } header: {
+                    Text("People")
+                } footer: {
+                    Text("How close two faces must be to count as the same person. Lower = stricter (more separate people); higher = merges more. Tune after your library is read.")
+                }
+
+                Section {
                     LabeledContent("Galleries", value: "\(library.galleries.count)")
                     LabeledContent("Hidden photos", value: "\(library.hiddenAssetIDs.count)")
                     if let scan = library.lastScan {

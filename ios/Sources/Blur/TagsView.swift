@@ -41,6 +41,9 @@ struct TagsView: View {
             .navigationDestination(for: SubjectRef.self) { ref in
                 SubjectDetailView(label: ref.label)
             }
+            .navigationDestination(for: PersonRef.self) { ref in
+                PhotoGrid(title: "Person", assetIDs: library.assets(forPerson: ref.id))
+            }
         }
     }
 
@@ -58,7 +61,27 @@ struct TagsView: View {
             if !albumTags.isEmpty {
                 Section("Albums") { ForEach(albumTags) { tagRow($0) } }
             }
+            peopleSection
             subjectsSection
+        }
+    }
+
+    // ── People (on-device face clustering) ──
+    @ViewBuilder
+    private var peopleSection: some View {
+        if !library.personFacets.isEmpty {
+            Section("People") {
+                ForEach(library.personFacets, id: \.person.id) { facet in
+                    NavigationLink(value: PersonRef(id: facet.person.id)) {
+                        HStack(spacing: 12) {
+                            AssetThumbnail(assetIdentifier: facet.person.cover, side: 36, cornerRadius: 18)
+                            Text("Person")
+                            Spacer(minLength: 8)
+                            Text("\(facet.count)").foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -166,4 +189,9 @@ struct TagsView: View {
 /// Navigation value for a Vision subject group.
 struct SubjectRef: Hashable {
     let label: String
+}
+
+/// Navigation value for a clustered person.
+struct PersonRef: Hashable {
+    let id: Int
 }

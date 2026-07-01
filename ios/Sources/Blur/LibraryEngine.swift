@@ -93,6 +93,15 @@ final class LibraryEngine: ObservableObject {
     @Published private(set) var blurredSubjects: Set<String> = []
     @Published private(set) var subjectBlurredIDs: Set<String> = []
 
+    // ── People (on-device face clustering) ──
+    /// One entry per clustered person (representative vector + cover).
+    @Published private(set) var personReps: [Person] = []
+    /// Distance below which two faces are the same person. Device-tunable — this
+    /// is the one knob that needs real-face calibration.
+    @Published var faceThreshold: Double = UserDefaults.standard.object(forKey: "faceThreshold") as? Double ?? 18 {
+        didSet { defaults.set(faceThreshold, forKey: "faceThreshold") }
+    }
+
     // ─── Persistence (UserDefaults; required-reason CA92.1) ──────────────────
     private let defaults = UserDefaults.standard
     private enum Key {
@@ -117,6 +126,7 @@ final class LibraryEngine: ObservableObject {
         }
         visionIndex = Self.loadVisionIndex()
         indexedCount = visionIndex.count
+        personReps = Self.loadPeople()
         lastScanDate = defaults.object(forKey: Key.lastScan) as? Date
         recomputeSubjectBlurred()
     }
@@ -342,25 +352,60 @@ final class LibraryEngine: ObservableObject {
         guard !indexing else { return }
         indexing = true
         var work = visionIndex
+        var reps = personReps
+        var nextPersonID = (reps.map { $0.id }.max() ?? 0) + 1
         var processed = 0
         for id in allPhotoIDs where work[id] == nil {
             if Task.isCancelled { break }
             let vt = await VisionTagger.tags(for: id)
+
+            // Cluster this photo's faces into people (greedy nearest-rep).
+            var people = Set<Int>()
+            for vec in vt.facePrints {
+                if let match = reps.min(by: { faceDistance(vec, $0.vector) < faceDistance(vec, $1.vector) }),
+                   faceDistance(vec, match.vector) <= Float(faceThreshold) {
+                    people.insert(match.id)
+                } else {
+                    reps.append(Person(id: nextPersonID, cover: id, vector: vec))
+                    people.insert(nextPersonID)
+                    nextPersonID += 1
+                }
+            }
+
             work[id] = PhotoVision(subjects: Array(vt.subjects.prefix(5).map { $0.label }),
-                                   text: vt.text)
+                                   text: vt.text, people: Array(people))
             processed += 1
             if processed % 40 == 0 {                 // batch UI updates + checkpoints
                 visionIndex = work
+                personReps = reps
                 indexedCount = work.count
                 recomputeSubjectBlurred()
                 Self.saveVisionIndex(work)
+                Self.savePeople(reps)
             }
         }
         visionIndex = work
+        personReps = reps
         indexedCount = work.count
         recomputeSubjectBlurred()
         Self.saveVisionIndex(work)
+        Self.savePeople(reps)
         indexing = false
+    }
+
+    /// People facets — each clustered person + how many photos they're in, most
+    /// photographed first. Singletons (a face seen once) are dropped as noise.
+    var personFacets: [(person: Person, count: Int)] {
+        var counts: [Int: Int] = [:]
+        for vision in visionIndex.values { for pid in vision.people { counts[pid, default: 0] += 1 } }
+        return personReps
+            .compactMap { rep in (counts[rep.id] ?? 0) >= 2 ? (rep, counts[rep.id]!) : nil }
+            .sorted { $0.1 > $1.1 }
+    }
+
+    /// The photos a person appears in, newest first.
+    func assets(forPerson id: Int) -> [String] {
+        allPhotoIDs.filter { visionIndex[$0]?.people.contains(id) ?? false }
     }
 
     /// How many photos still need a Vision pass.
@@ -473,6 +518,23 @@ final class LibraryEngine: ObservableObject {
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         if let data = try? JSONEncoder().encode(index) {
             try? data.write(to: indexURL, options: .atomic)
+        }
+    }
+
+    nonisolated private static var peopleURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("people.json")
+    }
+    nonisolated static func loadPeople() -> [Person] {
+        guard let data = try? Data(contentsOf: peopleURL),
+              let people = try? JSONDecoder().decode([Person].self, from: data) else { return [] }
+        return people
+    }
+    nonisolated static func savePeople(_ people: [Person]) {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(people) {
+            try? data.write(to: peopleURL, options: .atomic)
         }
     }
 
