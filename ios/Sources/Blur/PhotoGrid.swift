@@ -14,7 +14,7 @@ struct PhotoGrid: View {
     /// so a stack's members show expanded.
     var stacked: Bool = true
     @EnvironmentObject private var library: LibraryEngine
-    @State private var inspecting: InspectSelection?
+    @State private var viewer: ViewerContext?
     @State private var openStack: PhotoStack?
     @State private var pivot: Pivot?
     /// Cached grid units — recomputed only when the library/settings change (see
@@ -129,8 +129,8 @@ struct PhotoGrid: View {
                     .background(.ultraThinMaterial)
             }
         }
-        .sheet(item: $inspecting) { selection in
-            PhotoInspectorView(assetID: selection.id)
+        .fullScreenCover(item: $viewer) { context in
+            PhotoViewer(assetIDs: visibleAssetIDs, index: context.index)
         }
         .navigationDestination(item: $openStack) { stack in
             PhotoGrid(title: "\(stack.count) photos", assetIDs: stack.memberIDs, stacked: false)
@@ -227,7 +227,7 @@ struct PhotoGrid: View {
                 if isSelected { selection.remove(assetID) } else { selection.insert(assetID) }
                 Haptics.selection()
             } else {
-                inspecting = InspectSelection(id: assetID)
+                viewer = ViewerContext(index: visibleAssetIDs.firstIndex(of: assetID) ?? 0)
             }
         } label: {
             AssetThumbnail(
@@ -320,9 +320,10 @@ struct PhotoGrid: View {
     }
 }
 
-/// Identifiable wrapper so `.sheet(item:)` can present the inspector.
-private struct InspectSelection: Identifiable {
-    let id: String
+/// Identifiable wrapper carrying the tapped photo's index into the viewer.
+private struct ViewerContext: Identifiable {
+    let id = UUID()
+    let index: Int
 }
 
 /// A drill-down pivot from one photo to a related set — the find grammar.
