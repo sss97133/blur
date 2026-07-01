@@ -49,6 +49,9 @@ struct TagsView: View {
                 PhotoGrid(title: library.personName(ref.id) ?? "Person",
                           assetIDs: library.assets(forPerson: ref.id))
             }
+            .navigationDestination(for: PlaceRef.self) { ref in
+                PhotoGrid(title: ref.title, assetIDs: library.assets(inPlace: ref.key))
+            }
             .alert("Name Person", isPresented: Binding(
                 get: { renamingPerson != nil },
                 set: { if !$0 { renamingPerson = nil } }
@@ -70,6 +73,7 @@ struct TagsView: View {
             highlightsSection
             // Derived intelligence first — who and what — then Apple's types.
             peopleSection
+            placesSection
             subjectsSection
             if !typeTags.isEmpty {
                 Section {
@@ -156,6 +160,42 @@ struct TagsView: View {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    // ── Places (GPS clusters; only the centers get geocoded) ──
+    @ViewBuilder
+    private var placesSection: some View {
+        let clusters = library.placeClusters
+        if !clusters.isEmpty {
+            Section {
+                if library.geocoding {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Naming places…").font(.subheadline).foregroundStyle(.secondary)
+                    }
+                }
+                ForEach(clusters.prefix(60)) { cluster in
+                    NavigationLink(value: PlaceRef(key: cluster.id, title: cluster.title)) {
+                        HStack(spacing: 10) {
+                            Label(cluster.title,
+                                  systemImage: cluster.name == nil ? "mappin.and.ellipse" : "location.fill")
+                                .foregroundStyle(cluster.name == nil ? .secondary : .primary)
+                            Spacer(minLength: 8)
+                            Text("\(cluster.count)").foregroundStyle(.secondary).monospacedDigit()
+                        }
+                    }
+                }
+                if !library.geocoding && clusters.contains(where: { $0.name == nil }) {
+                    Button {
+                        Task { await library.geocodePlaces() }
+                    } label: { Label("Name these places", systemImage: "map") }
+                }
+            } header: {
+                Text("Places")
+            } footer: {
+                Text("Grouped by where you took them. Only each place's center is looked up — your photos never leave the phone.")
             }
         }
     }
@@ -269,4 +309,10 @@ struct SubjectRef: Hashable {
 /// Navigation value for a clustered person.
 struct PersonRef: Hashable {
     let id: Int
+}
+
+/// Navigation value for a GPS place cluster.
+struct PlaceRef: Hashable {
+    let key: String
+    let title: String
 }

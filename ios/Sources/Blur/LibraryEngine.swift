@@ -14,6 +14,7 @@ import Photos
 import PhotosUI
 import UIKit
 import ActivityKit
+import CoreLocation
 
 @MainActor
 final class LibraryEngine: ObservableObject {
@@ -144,6 +145,7 @@ final class LibraryEngine: ObservableObject {
         // here blocks launch, so it loads off-main in start() instead.
         personReps = Self.loadPeople()
         libraries = Self.loadLibraries()
+        placeNames = Self.loadPlaceNames()
         if let libs = defaults.stringArray(forKey: Key.blurredLibraries) {
             blurredLibraryIDs = Set(libs.compactMap { UUID(uuidString: $0) })
         }
@@ -324,7 +326,9 @@ final class LibraryEngine: ObservableObject {
             // Cheap properties — captured here so the grid can cluster "blasts"
             // (bursts + rapid runs) into stacks without re-fetching.
             meta[asset.localIdentifier] = AssetMeta(date: asset.creationDate,
-                                                    burstID: asset.burstIdentifier)
+                                                    burstID: asset.burstIdentifier,
+                                                    lat: asset.location?.coordinate.latitude,
+                                                    lon: asset.location?.coordinate.longitude)
         }
         return (ids, meta)
     }
@@ -655,6 +659,75 @@ final class LibraryEngine: ObservableObject {
 
     private func saveLibraries() { Self.saveLibraries(libraries) }
 
+    // ─── Places (GPS clustering, geocode only the centers) ───────────────────
+    /// gridKey → reverse-geocoded name, cached to disk. Only cluster CENTERS are
+    /// geocoded (a few dozen calls), never all 79k — that's how we stay under
+    /// CLGeocoder's rate limit.
+    @Published private(set) var placeNames: [String: String] = [:]
+    @Published private(set) var geocoding = false
+
+    /// ~0.1° ≈ 11km cell — coarse enough to be one "place" (a town/area).
+    nonisolated static func placeKey(_ lat: Double, _ lon: Double) -> String {
+        "\((lat * 10).rounded() / 10),\((lon * 10).rounded() / 10)"
+    }
+
+    /// GPS clusters over the whole library, most-photographed place first. Cover =
+    /// newest photo there. Name is nil until geocodePlaces() resolves the center.
+    var placeClusters: [PlaceCluster] {
+        var agg: [String: (n: Int, cover: String, lat: Double, lon: Double)] = [:]
+        for id in allPhotoIDs {
+            guard let m = assetMeta[id], let lat = m.lat, let lon = m.lon else { continue }
+            let k = Self.placeKey(lat, lon)
+            if let e = agg[k] { agg[k] = (e.n + 1, e.cover, e.lat, e.lon) }
+            else { agg[k] = (1, id, lat, lon) }   // allPhotoIDs is newest-first → cover is newest
+        }
+        return agg.map { k, v in
+            PlaceCluster(id: k, name: placeNames[k], count: v.n, cover: v.cover, lat: v.lat, lon: v.lon)
+        }.sorted { $0.count > $1.count }
+    }
+
+    /// Photos taken in a place cluster, newest first.
+    func assets(inPlace key: String) -> [String] {
+        allPhotoIDs.filter { id in
+            guard let m = assetMeta[id], let lat = m.lat, let lon = m.lon else { return false }
+            return Self.placeKey(lat, lon) == key
+        }
+    }
+
+    /// Reverse-geocode the top clusters' centers, paced ~1/sec to respect the
+    /// rate limit. Resumable — skips clusters already named. Publishes as it goes.
+    func geocodePlaces() async {
+        guard !geocoding else { return }
+        geocoding = true
+        defer { geocoding = false }
+        let geocoder = CLGeocoder()
+        for c in placeClusters.prefix(60) where placeNames[c.id] == nil {
+            let loc = CLLocation(latitude: c.lat, longitude: c.lon)
+            if let marks = try? await geocoder.reverseGeocodeLocation(loc), let p = marks.first {
+                let name = p.locality ?? p.subAdministrativeArea ?? p.administrativeArea
+                    ?? p.name ?? p.country ?? c.id
+                placeNames[c.id] = name
+                Self.savePlaceNames(placeNames)
+            }
+            try? await Task.sleep(nanoseconds: 1_200_000_000)   // ~1/sec — under CLGeocoder's cap
+        }
+    }
+
+    nonisolated private static var placeNamesURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("places.json")
+    }
+    nonisolated static func loadPlaceNames() -> [String: String] {
+        guard let data = try? Data(contentsOf: placeNamesURL),
+              let d = try? JSONDecoder().decode([String: String].self, from: data) else { return [:] }
+        return d
+    }
+    nonisolated static func savePlaceNames(_ names: [String: String]) {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let data = try? JSONEncoder().encode(names) { try? data.write(to: placeNamesURL, options: .atomic) }
+    }
+
     func isSubjectBlurred(_ label: String) -> Bool { blurredSubjects.contains(label) }
 
     /// "Blur anything automotive" — flip a subject; every photo Vision tagged
@@ -808,10 +881,26 @@ enum ViewMode: String, CaseIterable {
     }
 }
 
-/// Cheap per-asset facts captured at scan time, for stacking.
+/// Cheap per-asset facts captured at scan time, for stacking + places. GPS comes
+/// off PHAsset.location with NO image load, so it's free during the scan.
 struct AssetMeta {
     let date: Date?
     let burstID: String?
+    let lat: Double?
+    let lon: Double?
+}
+
+/// A GPS cluster of photos — one "place" (a ~11km cell). Name is nil until its
+/// center is reverse-geocoded.
+struct PlaceCluster: Identifiable, Hashable {
+    let id: String        // grid key
+    var name: String?
+    let count: Int
+    let cover: String
+    let lat: Double
+    let lon: Double
+    /// What to show before geocoding lands.
+    var title: String { name ?? "Location" }
 }
 
 /// A curated library — a named collection composed from tags (people + subjects).
