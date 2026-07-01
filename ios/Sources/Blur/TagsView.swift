@@ -14,8 +14,10 @@ import SwiftUI
 struct TagsView: View {
     @EnvironmentObject private var library: LibraryEngine
 
+    // Tags is the DERIVED surface — what Vision/PhotoKit read, not your manual
+    // albums (those live in the Albums tab). Only Apple's type smart-albums show
+    // here as facets; user albums are intentionally excluded.
     private var typeTags: [Gallery] { library.galleries.filter { $0.source == .smartAlbum } }
-    private var albumTags: [Gallery] { library.galleries.filter { $0.source == .userAlbum } }
 
     var body: some View {
         NavigationStack {
@@ -26,7 +28,7 @@ struct TagsView: View {
                 } else if library.galleries.isEmpty && library.allPhotoIDs.isEmpty {
                     if library.didCompleteInitialScan {
                         ContentUnavailableView("No tags yet", systemImage: "tag",
-                            description: Text("Types and albums from your library appear here."))
+                            description: Text("People, subjects, and types Blur reads from your library appear here."))
                     } else {
                         ProgressView().controlSize(.large)
                     }
@@ -49,6 +51,9 @@ struct TagsView: View {
 
     private var list: some View {
         List {
+            // Derived intelligence first — who and what — then Apple's types.
+            peopleSection
+            subjectsSection
             if !typeTags.isEmpty {
                 Section {
                     ForEach(typeTags) { tagRow($0) }
@@ -58,11 +63,6 @@ struct TagsView: View {
                     Text("Blur a tag (swipe or touch and hold) to auto-blur everything with it — new photos included. Flip the eye to Hidden to drop them from the feed entirely.")
                 }
             }
-            if !albumTags.isEmpty {
-                Section("Albums") { ForEach(albumTags) { tagRow($0) } }
-            }
-            peopleSection
-            subjectsSection
         }
     }
 
