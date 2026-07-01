@@ -226,6 +226,13 @@ final class LibraryEngine: ObservableObject {
             NSLog("Blur scan: %d galleries (%d user, %d smart), %d photos",
                   result.galleries.count, result.userAlbums, result.smartAlbums, photos)
         }
+
+        // Keep Vision working through the library continuously — auto-resume the
+        // index whenever there's unread work, regardless of what page the user is
+        // on. indexLibrary() guards against double-running and skips the done.
+        if !indexing && unindexedCount > 0 {
+            Task { await indexLibrary() }
+        }
         return true
     }
 
