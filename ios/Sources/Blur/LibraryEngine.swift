@@ -412,7 +412,11 @@ final class LibraryEngine: ObservableObject {
         var reps = personReps
         var nextPersonID = (reps.map { $0.id }.max() ?? 0) + 1
         var processed = 0
-        for id in allPhotoIDs where work[id] == nil {
+        // Priority order: Favorites first (explicitly important), then the rest
+        // newest-first. The work[id]==nil guard dedups the overlap.
+        let favorites = galleries.first { $0.source == .smartAlbum && $0.title.lowercased().contains("favorite") }?.assetIDs ?? []
+        let order = favorites + allPhotoIDs
+        for id in order where work[id] == nil {
             if Task.isCancelled || indexIntensity == .off { break }
             let vt = await VisionTagger.tags(for: id)
 
