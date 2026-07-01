@@ -17,7 +17,11 @@ struct AssetThumbnail: View {
     /// When true, the image is rendered with a heavy blur (the "hidden" state).
     var blurred: Bool = false
 
-    @Environment(\.displayScale) private var displayScale
+    /// Fixed load resolution — large enough to stay crisp across the whole pinch
+    /// zoom range (dense tiles → a couple per row), independent of the current
+    /// tile size so resizing never triggers a reload.
+    private static let loadTarget = CGSize(width: 500, height: 500)
+
     @State private var image: UIImage?
 
     var body: some View {
@@ -39,14 +43,18 @@ struct AssetThumbnail: View {
         .animation(.default, value: blurred)
         // Decorative — the enclosing card/button carries the accessible label.
         .accessibilityHidden(true)
-        // Reload when the identifier OR the tile size changes: pinch-zooming the
-        // grid resizes tiles, and we want crisp pixels at the new size, like Photos.
-        .task(id: "\(assetIdentifier)#\(Int(side.rounded()))") {
+        // Load ONCE per asset at a fixed resolution — keyed on the identifier
+        // only, NOT the tile size. Pinch-zoom changes `side` every frame; if the
+        // load were keyed on size, each pinch would blank + reload every tile
+        // (the white flash). Keeping one cached image and letting .scaledToFill
+        // rescale it is how Photos stays graceful — the tiles shrink/grow with a
+        // real image on every frame.
+        .task(id: assetIdentifier) {
             image = await AssetImageLoader.load(
                 identifier: assetIdentifier,
-                target: CGSize(width: side * displayScale, height: side * displayScale),
+                target: Self.loadTarget,
                 mode: .aspectFill,
-                crisp: false,           // grid: cheap resize, small target
+                crisp: false,           // cheap resize
                 allowsNetwork: true     // load iCloud-optimized photos
             )
         }

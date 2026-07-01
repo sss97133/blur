@@ -11,7 +11,13 @@ struct GalleriesView: View {
     @EnvironmentObject private var library: LibraryEngine
     @State private var showSettings = false
 
-    private let columns = [GridItem(.adaptive(minimum: 150), spacing: 12)]
+    // Pinch-to-zoom column count (matches the photo grid). Default 3 — denser
+    // than the old adaptive 2-per-row.
+    @State private var columns = 3
+    @GestureState private var pinch: CGFloat = 1
+    private let minColumns = 2
+    private let maxColumns = 5
+    private let spacing: CGFloat = 12
 
     var body: some View {
         NavigationStack {
@@ -57,18 +63,35 @@ struct GalleriesView: View {
     }
 
     private var grid: some View {
-        ScrollView {
-            LazyVGrid(columns: columns, spacing: 12) {
-                ForEach(library.galleries) { gallery in
-                    NavigationLink {
-                        PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
-                    } label: {
-                        GalleryCard(gallery: gallery)
+        GeometryReader { geo in
+            let tile = (geo.size.width - spacing * CGFloat(columns + 1)) / CGFloat(columns)
+            let cols = Array(repeating: GridItem(.fixed(tile), spacing: spacing), count: columns)
+            ScrollView {
+                LazyVGrid(columns: cols, spacing: spacing) {
+                    ForEach(library.galleries) { gallery in
+                        NavigationLink {
+                            PhotoGrid(title: gallery.title, assetIDs: gallery.assetIDs)
+                        } label: {
+                            GalleryCard(gallery: gallery, side: tile)
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
                 }
+                .padding(spacing)
+                .scaleEffect(min(max(pinch, 0.6), 1.7), anchor: .center)
             }
-            .padding(12)
+            .scrollDisabled(pinch != 1)
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .updating($pinch) { value, state, _ in state = value.magnification }
+                    .onEnded { value in
+                        let next: Int
+                        if value.magnification > 1.15 { next = max(minColumns, columns - 1) }
+                        else if value.magnification < 0.87 { next = min(maxColumns, columns + 1) }
+                        else { next = columns }
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.86)) { columns = next }
+                    }
+            )
         }
     }
 
@@ -97,16 +120,17 @@ struct GalleriesView: View {
 
 private struct GalleryCard: View {
     let gallery: Gallery
+    var side: CGFloat = 160
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             ZStack(alignment: .bottomTrailing) {
                 if let cover = gallery.coverAssetID {
-                    AssetThumbnail(assetIdentifier: cover, side: 160, cornerRadius: 12)
+                    AssetThumbnail(assetIdentifier: cover, side: side, cornerRadius: 12)
                 } else {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color(.secondarySystemFill))
-                        .frame(width: 160, height: 160)
+                        .frame(width: side, height: side)
                 }
                 if gallery.source == .clustered {
                     Image(systemName: "sparkles")
@@ -123,6 +147,7 @@ private struct GalleryCard: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .frame(width: side, alignment: .leading)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(gallery.title), \(gallery.count) photo\(gallery.count == 1 ? "" : "s")")
         .accessibilityAddTraits(.isButton)
