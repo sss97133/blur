@@ -22,6 +22,7 @@ struct FastPhotoGrid: UIViewRepresentable {
     let onTap: (GridUnit) -> Void
     let onBlur: (GridUnit) -> Void
     let onSelectFromMenu: (GridUnit) -> Void
+    let onExplain: (String) -> Void          // "Why (not) blurred?" for a photo
     // Drill pivots (the find grammar), for single photos.
     let subjectsFor: (String) -> [String]
     let dateFor: (String) -> Date?
@@ -236,7 +237,8 @@ struct FastPhotoGrid: UIViewRepresentable {
             return UIContextMenuConfiguration(identifier: nil, previewProvider: nil) { _ in
                 let blur = UIAction(title: "Blur", image: UIImage(systemName: "eye.slash")) { _ in self.parent.onBlur(unit) }
                 let select = UIAction(title: "Select", image: UIImage(systemName: "checkmark.circle")) { _ in self.parent.onSelectFromMenu(unit) }
-                var children: [UIMenuElement] = [blur, select]
+                let why = UIAction(title: "Why blurred?", image: UIImage(systemName: "questionmark.circle")) { _ in self.parent.onExplain(id) }
+                var children: [UIMenuElement] = [blur, select, why]
                 if !unit.isStack {
                     var pivots: [UIMenuElement] = []
                     if let date = self.parent.dateFor(id) {

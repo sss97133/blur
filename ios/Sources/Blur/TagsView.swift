@@ -70,6 +70,7 @@ struct TagsView: View {
 
     private var list: some View {
         List {
+            suggestedSection
             highlightsSection
             // Derived intelligence first — who and what — then Apple's types.
             peopleSection
@@ -83,6 +84,47 @@ struct TagsView: View {
                 } footer: {
                     Text("Blur a tag (swipe or touch and hold) to auto-blur everything with it — new photos included. Flip the eye to Hidden to drop them from the feed entirely.")
                 }
+            }
+        }
+    }
+
+    // ── Suggested blurs: patterns learned from your MANUAL blurs (you sign) ──
+    @ViewBuilder
+    private var suggestedSection: some View {
+        let suggestions = library.blurSuggestions()
+        if !suggestions.isEmpty {
+            Section {
+                ForEach(suggestions) { s in
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(spacing: 8) {
+                            Image(systemName: "wand.and.stars").foregroundStyle(.indigo)
+                            Text(s.subject).font(.headline)
+                            Spacer()
+                            Text("\(Int(s.lift))× more").font(.caption).foregroundStyle(.secondary)
+                        }
+                        Text("You've hand-blurred \(s.inManual) of \(s.manualTotal) — far more than “\(s.subject)” shows up overall. Blur \(s.wouldBlur) more like it?")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        HStack {
+                            Button {
+                                library.setSubjectBlur(s.subject, true)
+                                Haptics.success()
+                            } label: {
+                                Label("Blur all \(s.subject)", systemImage: "eye.slash")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.indigo)
+                            Spacer()
+                            Button("Not this") { library.dismissSuggestion(s.subject) }
+                                .font(.subheadline).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+            } header: {
+                Text("Suggested blurs")
+            } footer: {
+                Text("Learned from what you blur by hand — never applied on its own. Accept to make it a rule (new photos included), or dismiss.")
             }
         }
     }

@@ -146,6 +146,9 @@ final class LibraryEngine: ObservableObject {
         personReps = Self.loadPeople()
         libraries = Self.loadLibraries()
         placeNames = Self.loadPlaceNames()
+        if let dm = defaults.stringArray(forKey: "dismissedSuggestions") {
+            dismissedSuggestions = Set(dm)
+        }
         if let libs = defaults.stringArray(forKey: Key.blurredLibraries) {
             blurredLibraryIDs = Set(libs.compactMap { UUID(uuidString: $0) })
         }
@@ -659,6 +662,83 @@ final class LibraryEngine: ObservableObject {
 
     private func saveLibraries() { Self.saveLibraries(libraries) }
 
+    // ─── Blur provenance & learning (trust: WHY is this blurred?) ─────────────
+
+    /// Every reason this photo is blurred — the collapsed isHidden() bool, opened
+    /// up. Empty means it's NOT blurred.
+    func blurReasons(_ id: String) -> [BlurReason] {
+        var out: [BlurReason] = []
+        if hiddenAssetIDs.contains(id) { out.append(.manual) }
+        for g in galleries where blurredCategoryIDs.contains(g.id) && g.assetIDs.contains(id) {
+            out.append(.category(g.title))
+        }
+        if let v = visionIndex[id] {
+            for s in v.subjects where blurredSubjects.contains(s) { out.append(.subject(s)) }
+        }
+        for lib in libraries where blurredLibraryIDs.contains(lib.id) && isMember(id, lib) {
+            out.append(.library(lib.name))
+        }
+        return out
+    }
+
+    private func isMember(_ id: String, _ lib: CuratedLibrary) -> Bool {
+        guard let v = visionIndex[id] else { return false }
+        return !Set(v.people).isDisjoint(with: Set(lib.personIDs))
+            || !Set(v.subjects).isDisjoint(with: Set(lib.subjects))
+    }
+
+    /// The full "why (not) blurred" picture for one photo — drives the Why sheet.
+    func explain(_ id: String) -> BlurExplanation {
+        let v = visionIndex[id]
+        return BlurExplanation(
+            isBlurred: isHidden(id),
+            reasons: blurReasons(id),
+            indexed: v != nil,
+            subjects: v?.subjects ?? [],
+            peopleNames: (v?.people ?? []).compactMap { personName($0) })
+    }
+
+    // ── Learn from manual blurs (never auto-apply — propose, you sign) ──
+    /// Subjects the user has DISMISSED as suggestions — so they don't nag.
+    @Published private(set) var dismissedSuggestions: Set<String> = []
+
+    /// Patterns in your MANUAL blurs: subjects that appear far more among the
+    /// photos you blur by hand than in the library at large (lift ≥ threshold).
+    /// A manual blur never becomes a rule on its own — these are proposals.
+    func blurSuggestions(minShare: Double = 0.25, minCount: Int = 3, minLift: Double = 1.6) -> [BlurSuggestion] {
+        let manual = hiddenAssetIDs.filter { visionIndex[$0] != nil }
+        guard manual.count >= minCount, !visionIndex.isEmpty else { return [] }
+        let manualTotal = manual.count
+        let libTotal = visionIndex.count
+
+        var inManual: [String: Int] = [:]
+        for id in manual { for s in Set(visionIndex[id]?.subjects ?? []) { inManual[s, default: 0] += 1 } }
+        var inLib: [String: Int] = [:]
+        for v in visionIndex.values { for s in Set(v.subjects) { inLib[s, default: 0] += 1 } }
+
+        return inManual.compactMap { subject, cnt -> BlurSuggestion? in
+            guard cnt >= minCount,
+                  !blurredSubjects.contains(subject),
+                  !dismissedSuggestions.contains(subject) else { return nil }
+            let share = Double(cnt) / Double(manualTotal)
+            let baseShare = Double(inLib[subject] ?? 0) / Double(libTotal)
+            let lift = baseShare > 0 ? share / baseShare : share
+            guard share >= minShare, lift >= minLift else { return nil }
+            // How many MORE (not already blurred) this rule would cover.
+            let would = allPhotoIDs.reduce(0) { acc, id in
+                acc + ((!isHidden(id) && (visionIndex[id]?.subjects.contains(subject) ?? false)) ? 1 : 0)
+            }
+            return BlurSuggestion(subject: subject, inManual: cnt, manualTotal: manualTotal,
+                                  lift: lift, wouldBlur: would)
+        }.sorted { $0.lift > $1.lift }
+    }
+
+    /// Stop suggesting this subject.
+    func dismissSuggestion(_ subject: String) {
+        dismissedSuggestions.insert(subject)
+        defaults.set(Array(dismissedSuggestions), forKey: "dismissedSuggestions")
+    }
+
     // ─── Places (GPS clustering, geocode only the centers) ───────────────────
     /// gridKey → reverse-geocoded name, cached to disk. Only cluster CENTERS are
     /// geocoded (a few dozen calls), never all 79k — that's how we stay under
@@ -888,6 +968,58 @@ struct AssetMeta {
     let burstID: String?
     let lat: Double?
     let lon: Double?
+}
+
+/// One reason a photo is blurred — the provenance behind isHidden().
+enum BlurReason: Identifiable, Hashable {
+    case manual                 // you blurred it by hand
+    case category(String)       // in a blurred tag/album (title)
+    case subject(String)        // Vision saw a subject you blur
+    case library(String)        // in a blurred library (name)
+
+    var id: String {
+        switch self {
+        case .manual:            return "manual"
+        case .category(let t):   return "cat:\(t)"
+        case .subject(let s):    return "sub:\(s)"
+        case .library(let n):    return "lib:\(n)"
+        }
+    }
+    var label: String {
+        switch self {
+        case .manual:            return "Blurred by hand"
+        case .category(let t):   return "In your blurred tag “\(t)”"
+        case .subject(let s):    return "Vision saw “\(s)” — a subject you blur"
+        case .library(let n):    return "In your blurred library “\(n)”"
+        }
+    }
+    var systemImage: String {
+        switch self {
+        case .manual:   return "hand.draw"
+        case .category: return "tag"
+        case .subject:  return "sparkle"
+        case .library:  return "books.vertical"
+        }
+    }
+}
+
+/// The full "why (not) blurred" picture for one photo.
+struct BlurExplanation {
+    let isBlurred: Bool
+    let reasons: [BlurReason]   // why blurred (empty ⇒ not blurred)
+    let indexed: Bool           // has Vision read it yet?
+    let subjects: [String]      // what Vision saw (the skip explainer)
+    let peopleNames: [String]   // named people present
+}
+
+/// A proposed blur rule mined from your manual blurs — never auto-applied.
+struct BlurSuggestion: Identifiable, Hashable {
+    let subject: String
+    let inManual: Int           // your manual blurs carrying this subject
+    let manualTotal: Int        // total manual blurs Vision has read
+    let lift: Double            // how much MORE you blur it vs the library baseline
+    let wouldBlur: Int          // additional photos accepting would blur
+    var id: String { subject }
 }
 
 /// A GPS cluster of photos — one "place" (a ~11km cell). Name is nil until its

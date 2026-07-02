@@ -17,6 +17,8 @@ struct PhotoGrid: View {
     @State private var viewer: ViewerContext?
     @State private var openStack: PhotoStack?
     @State private var pivot: Pivot?
+    /// Asset id whose blur provenance is being explained (the Why sheet).
+    @State private var explaining: ExplainRef?
     /// Cached grid units — recomputed only when the library/settings change (see
     /// unitSignature), NOT on every render. Clustering the whole library on each
     /// pinch frame would freeze a large library.
@@ -107,6 +109,7 @@ struct PhotoGrid: View {
                 selection = Set(unit.assetIDs)
                 Haptics.impact()
             },
+            onExplain: { explaining = ExplainRef(id: $0); Haptics.impact(.light) },
             subjectsFor: { library.subjects(for: $0) },
             dateFor: { library.assetMeta[$0]?.date },
             onPivotSubject: { pivot = .subject($0) },
@@ -152,6 +155,10 @@ struct PhotoGrid: View {
         }
         .fullScreenCover(item: $viewer) { context in
             PhotoViewer(assetIDs: visibleAssetIDs, index: context.index)
+        }
+        .sheet(item: $explaining) { ref in
+            WhyBlurView(assetID: ref.id).environmentObject(library)
+                .presentationDetents([.medium, .large])
         }
         .navigationDestination(item: $openStack) { stack in
             // A time bucket ("March 2024") drills into that month WITH bursts still
@@ -242,6 +249,9 @@ private struct ViewerContext: Identifiable {
     let id = UUID()
     let index: Int
 }
+
+/// Identifiable wrapper so an asset id can drive a `.sheet(item:)`.
+private struct ExplainRef: Identifiable { let id: String }
 
 /// A drill-down pivot from one photo to a related set — the find grammar.
 enum Pivot: Hashable, Identifiable {
